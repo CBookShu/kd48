@@ -1,0 +1,36 @@
+services:
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.17
+    environment:
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    ports:
+      - "2379:2379"
+    volumes:
+      - etcd_data:/etcd-data
+
+  mysql:
+    image: mysql:8.0.39
+    platform: linux/arm64
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=kd48
+      - MYSQL_USER=kd48
+      - MYSQL_PASSWORD=kd48
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7.2.6-alpine
+    platform: linux/arm64
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  etcd_data:
+  mysql_data:
+  redis_data:
