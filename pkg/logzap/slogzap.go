@@ -32,11 +32,8 @@ func New(level string) *ZapHandler {
 	// 使用 Zap 新版标准配置方式
 	cfg := zap.NewProductionConfig()
 	cfg.Encoding = "json"
-	// 修正 1：TimeKey 移到了 EncoderConfig 内部
 	cfg.EncoderConfig.TimeKey = "ts"
 
-	// 修正 2：Build 直接返回 *zap.Logger，不再强转 Core
-	// AddCallerSkip(2) 跳过 slog 框架本身的栈帧，让日志打印到真正调用 slog.Info 的地方
 	core, err := cfg.Build(zap.AddCallerSkip(2))
 	if err != nil {
 		panic(err)
