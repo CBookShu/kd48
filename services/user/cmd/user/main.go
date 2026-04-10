@@ -1,21 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"context"
+	"log/slog"
 
 	"github.com/CBookShu/kd48/pkg/conf"
+	"github.com/CBookShu/kd48/pkg/logzap"
 )
 
 func main() {
 	c, err := conf.Load("./config.yaml")
 	if err != nil {
-		log.Fatalf("load config failed: %v", err)
+		panic(err)
 	}
 
-	fmt.Printf("[User Service] Booting... Server: %s, Env: %s, gRPC Port: %d\n",
-		c.Server.Name, c.Server.Env, c.UserService.Port)
+	handler := logzap.New(c.Log.Level)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
-	// TODO: 注入 Wire
-	// TODO: 启动 gRPC Server
+	ctx := context.Background()
+	slog.InfoContext(ctx, "User service starting up...", "module", "user_service", "port", c.UserService.Port)
 }

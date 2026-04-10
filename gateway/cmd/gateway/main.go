@@ -1,10 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
+	"log/slog"
 
 	"github.com/CBookShu/kd48/pkg/conf"
+	"github.com/CBookShu/kd48/pkg/logzap"
 )
 
 func main() {
@@ -14,9 +16,12 @@ func main() {
 		log.Fatalf("load config failed: %v", err)
 	}
 
-	fmt.Printf("[Gateway] Booting... Server: %s, Env: %s, Listen Port: %d\n",
-		c.Server.Name, c.Server.Env, c.Gateway.Port)
+	handler := logzap.New(c.Log.Level)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
-	// TODO: 注入 Wire
-	// TODO: 启动 WS Server
+	ctx := context.Background()
+	slog.InfoContext(ctx, "Gateway starting up...", "module", "gateway", "port", c.Gateway.Port)
+	slog.WarnContext(ctx, "This is a warning message", "reason", "test zap bridge")
+	slog.DebugContext(ctx, "Debugging data", "map_data", map[string]int{"a": 1, "b": 2})
 }

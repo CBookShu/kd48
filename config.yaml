@@ -7,3 +7,6 @@ gateway:
 
 user_service:
   port: 9000
+
+log:
+  level: "debug" # debug, info, warn, error

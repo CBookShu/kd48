@@ -11,6 +11,7 @@ type Config struct {
 	Server      ServerConf      `mapstructure:"server"`
 	Gateway     GatewayConf     `mapstructure:"gateway"`
 	UserService UserServiceConf `mapstructure:"user_service"`
+	Log         LogConf         `mapstructure:"log"`
 }
 
 type ServerConf struct {
@@ -24,6 +25,10 @@ type GatewayConf struct {
 
 type UserServiceConf struct {
 	Port int `mapstructure:"port"`
+}
+
+type LogConf struct {
+	Level string `mapstructure:"level"`
 }
 
 // Load 加载配置文件
