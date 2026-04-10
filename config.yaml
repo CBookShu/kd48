@@ -1,0 +1,9 @@
+server:
+  name: "kd48"
+  env: "dev"
+
+gateway:
+  port: 8080
+
+user_service:
+  port: 9000
