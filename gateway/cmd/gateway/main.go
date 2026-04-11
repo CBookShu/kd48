@@ -2,19 +2,22 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/CBookShu/kd48/gateway/internal/ws"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/rediskit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/fiber/v2"
 	"go.etcd.io/etcd/client/v3/naming/resolver"
-	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcresolver "google.golang.org/grpc/resolver"
@@ -42,8 +45,6 @@ func main() {
 		}
 	}()
 
-	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
-
 	rdb, err := rediskit.NewClient(c.Redis)
 	if err != nil {
 		panic(err)
@@ -56,15 +57,12 @@ func main() {
 	}
 	defer etcdCli.Close()
 
-	// 1. 将 Etcd 注册为 gRPC 的 Resolver
+	// 1. gRPC 连接
 	etcdResolverBuilder, err := resolver.NewBuilder(etcdCli)
 	if err != nil {
 		panic(err)
 	}
 	grpcresolver.Register(etcdResolverBuilder)
-
-	// 2. 使用 Etcd 解析器建立 gRPC 连接
-	// 注意格式：etcd:///服务名
 	conn, err := grpc.Dial(
 		"etcd:///kd48/user-service",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -79,23 +77,38 @@ func main() {
 	userClient := userv1.NewUserServiceClient(conn)
 	slog.Info("Gateway connected to User Service cluster via Etcd")
 
-	// 3. 模拟一个外部 WS 请求触发的内部 gRPC 调用
-	ctx, span := tracer.Start(context.Background(), "GatewayMockWSLogin")
-	defer span.End()
-	ctx = otelkit.InjectTraceIDToCtx(ctx)
-
-	slog.InfoContext(ctx, "Mocking external login request...")
-
-	// 发起 gRPC 调用
-	resp, err := userClient.Login(ctx, &userv1.LoginRequest{
-		Username: "admin",
-		Password: "123456",
+	// 2. 初始化 Fiber App
+	app := fiber.New(fiber.Config{
+		// 关闭 Fiber 启动时的 ASCII Banner，保持日志整洁
+		DisableStartupMessage: true,
 	})
-	if err != nil {
-		slog.ErrorContext(ctx, "Login gRPC call failed", "error", err)
-	} else {
-		slog.InfoContext(ctx, "Login gRPC call success", "token", resp.Token)
-	}
+
+	// 3. 注册路由
+	// 健康检查
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	// WebSocket 路由
+	// 必须先经过 IsWebSocketUpgrade 中间件拦截非 WS 请求
+	app.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	wsHandler := ws.NewHandler(userClient)
+	// websocket.New 会自动完成握手，并将 conn 存入 c.Locals("websocket")
+	app.Get("/ws", websocket.New(wsHandler.ServeWS))
+
+	// 4. 启动服务
+	go func() {
+		slog.Info("Gateway Fiber WS server listening", "port", c.Gateway.Port)
+		if err := app.Listen(fmt.Sprintf(":%d", c.Gateway.Port)); err != nil {
+			panic(err)
+		}
+	}()
 
 	// 阻塞等待退出信号
 	slog.Info("Server is running, press Ctrl+C to stop...")
