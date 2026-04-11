@@ -6,14 +6,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/rediskit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"go.etcd.io/etcd/client/v3/naming/resolver"
 	"go.opentelemetry.io/otel"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	grpcresolver "google.golang.org/grpc/resolver"
 )
 
 func main() {
@@ -40,41 +44,57 @@ func main() {
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
-	// 3. 初始化 Redis
 	rdb, err := rediskit.NewClient(c.Redis)
 	if err != nil {
-		slog.Error("Redis init failed", "error", err)
 		panic(err)
 	}
 	defer rdb.Close()
-	slog.Info("Redis connected", "addr", c.Redis.Addr)
 
-	// 4. 初始化 Etcd
-	etcd, err := registry.NewClient(c.Etcd)
+	etcdCli, err := registry.NewClient(c.Etcd)
 	if err != nil {
-		slog.Error("Etcd init failed", "error", err)
 		panic(err)
 	}
-	defer etcd.Close()
-	slog.Info("Etcd connected", "endpoints", c.Etcd.Endpoints)
+	defer etcdCli.Close()
 
-	// 5. 模拟一个带完整追踪的请求链路
-	ctx, span := tracer.Start(context.Background(), "MockWSConnection")
+	// 1. 将 Etcd 注册为 gRPC 的 Resolver
+	etcdResolverBuilder, err := resolver.NewBuilder(etcdCli)
+	if err != nil {
+		panic(err)
+	}
+	grpcresolver.Register(etcdResolverBuilder)
+
+	// 2. 使用 Etcd 解析器建立 gRPC 连接
+	// 注意格式：etcd:///服务名
+	conn, err := grpc.Dial(
+		"etcd:///kd48/user-service",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`), // 轮询负载均衡
+	)
+	if err != nil {
+		slog.Error("gRPC dial failed", "error", err)
+		panic(err)
+	}
+	defer conn.Close()
+
+	userClient := userv1.NewUserServiceClient(conn)
+	slog.Info("Gateway connected to User Service cluster via Etcd")
+
+	// 3. 模拟一个外部 WS 请求触发的内部 gRPC 调用
+	ctx, span := tracer.Start(context.Background(), "GatewayMockWSLogin")
 	defer span.End()
 	ctx = otelkit.InjectTraceIDToCtx(ctx)
 
-	slog.InfoContext(ctx, "Gateway fully booted, all dependencies ready",
-		"redis", c.Redis.Addr,
-		"etcd", c.Etcd.Endpoints,
-		"port", c.Gateway.Port,
-	)
+	slog.InfoContext(ctx, "Mocking external login request...")
 
-	// 模拟写入 Redis
-	err = rdb.Set(ctx, "test:key", "hello_kd48", 10*time.Second).Err()
+	// 发起 gRPC 调用
+	resp, err := userClient.Login(ctx, &userv1.LoginRequest{
+		Username: "admin",
+		Password: "123456",
+	})
 	if err != nil {
-		slog.ErrorContext(ctx, "Redis set failed", "error", err)
+		slog.ErrorContext(ctx, "Login gRPC call failed", "error", err)
 	} else {
-		slog.InfoContext(ctx, "Redis write succeeded")
+		slog.InfoContext(ctx, "Login gRPC call success", "token", resp.Token)
 	}
 
 	// 阻塞等待退出信号
