@@ -11,6 +11,8 @@ import (
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
+	"github.com/CBookShu/kd48/pkg/rediskit"
+	"github.com/CBookShu/kd48/pkg/registry"
 	"go.opentelemetry.io/otel"
 )
 
@@ -38,24 +40,44 @@ func main() {
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
-	// 3. 模拟一个请求处理的完整链路
-	slog.Info("Gateway starting...")
+	// 3. 初始化 Redis
+	rdb, err := rediskit.NewClient(c.Redis)
+	if err != nil {
+		slog.Error("Redis init failed", "error", err)
+		panic(err)
+	}
+	defer rdb.Close()
+	slog.Info("Redis connected", "addr", c.Redis.Addr)
 
-	// 假设这是一个 WS 连接建立后的上下文
+	// 4. 初始化 Etcd
+	etcd, err := registry.NewClient(c.Etcd)
+	if err != nil {
+		slog.Error("Etcd init failed", "error", err)
+		panic(err)
+	}
+	defer etcd.Close()
+	slog.Info("Etcd connected", "endpoints", c.Etcd.Endpoints)
+
+	// 5. 模拟一个带完整追踪的请求链路
 	ctx, span := tracer.Start(context.Background(), "MockWSConnection")
 	defer span.End()
-
-	// 【核心动作】：将 OTel 的 TraceID 注入到 context 中
 	ctx = otelkit.InjectTraceIDToCtx(ctx)
 
-	// 4. 打印日志 (此时传入了携带 trace_id 的 ctx)
-	slog.InfoContext(ctx, "New client connected via WS", "client_ip", "192.168.1.100")
+	slog.InfoContext(ctx, "Gateway fully booted, all dependencies ready",
+		"redis", c.Redis.Addr,
+		"etcd", c.Etcd.Endpoints,
+		"port", c.Gateway.Port,
+	)
 
-	// 模拟内部调用（虽然现在没写 gRPC，但日志已经串起来了）
-	time.Sleep(100 * time.Millisecond)
-	slog.InfoContext(ctx, "User login request received", "user_id", 123)
+	// 模拟写入 Redis
+	err = rdb.Set(ctx, "test:key", "hello_kd48", 10*time.Second).Err()
+	if err != nil {
+		slog.ErrorContext(ctx, "Redis set failed", "error", err)
+	} else {
+		slog.InfoContext(ctx, "Redis write succeeded")
+	}
 
-	// 阻塞等待退出信号 (Ctrl+C)
+	// 阻塞等待退出信号
 	slog.Info("Server is running, press Ctrl+C to stop...")
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

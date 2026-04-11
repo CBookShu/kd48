@@ -10,3 +10,12 @@ user_service:
 
 log:
   level: "debug" # debug, info, warn, error
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "localhost:2379"

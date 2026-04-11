@@ -12,6 +12,8 @@ type Config struct {
 	Gateway     GatewayConf     `mapstructure:"gateway"`
 	UserService UserServiceConf `mapstructure:"user_service"`
 	Log         LogConf         `mapstructure:"log"`
+	Redis       RedisConf       `mapstructure:"redis"`
+	Etcd        EtcdConf        `mapstructure:"etcd"`
 }
 
 type ServerConf struct {
@@ -29,6 +31,16 @@ type UserServiceConf struct {
 
 type LogConf struct {
 	Level string `mapstructure:"level"`
+}
+
+type RedisConf struct {
+	Addr     string `mapstructure:"addr"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+type EtcdConf struct {
+	Endpoints []string `mapstructure:"endpoints"`
 }
 
 // Load 加载配置文件
