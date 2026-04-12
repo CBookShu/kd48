@@ -18,6 +18,8 @@ import (
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"go.etcd.io/etcd/client/v3/naming/resolver"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcresolver "google.golang.org/grpc/resolver"
@@ -67,6 +69,7 @@ func main() {
 		"etcd:///kd48/user-service",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`), // 轮询负载均衡
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		slog.Error("gRPC dial failed", "error", err)
@@ -76,6 +79,8 @@ func main() {
 
 	userClient := userv1.NewUserServiceClient(conn)
 	slog.Info("Gateway connected to User Service cluster via Etcd")
+
+	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
 	// 2. 初始化 Fiber App
 	app := fiber.New(fiber.Config{
@@ -98,7 +103,7 @@ func main() {
 		return fiber.ErrUpgradeRequired
 	})
 
-	wsHandler := ws.NewHandler(userClient)
+	wsHandler := ws.NewHandler(userClient, tracer)
 	// websocket.New 会自动完成握手，并将 conn 存入 c.Locals("websocket")
 	app.Get("/ws", websocket.New(wsHandler.ServeWS))
 

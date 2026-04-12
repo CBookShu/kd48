@@ -14,6 +14,7 @@ import (
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -25,10 +26,7 @@ type userService struct {
 }
 
 func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
-	// 注入 TraceID 打印日志
-	ctx = otelkit.InjectTraceIDToCtx(ctx)
 	slog.InfoContext(ctx, "Received Login request", "username", req.Username)
-
 	// Mock 业务逻辑
 	if req.Username == "admin" && req.Password == "123456" {
 		return &userv1.LoginReply{
@@ -61,7 +59,9 @@ func main() {
 		panic(err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	userv1.RegisterUserServiceServer(s, &userService{})
 
 	go func() {

@@ -5,6 +5,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
@@ -15,9 +16,7 @@ import (
 // 目前使用标准输出导出（方便本地调试），后续替换为 Jaeger/OTLP 导出器即可
 func InitTracer(serviceName string) (func(context.Context) error, error) {
 	// 使用标准输出导出器 (本地开发阶段最直观)
-	exporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint(), // 美化输出，上线前去掉
-	)
+	exporter, err := stdouttrace.New()
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +31,13 @@ func InitTracer(serviceName string) (func(context.Context) error, error) {
 
 	// 注册为全局 Provider
 	otel.SetTracerProvider(tp)
+
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
 
 	// 返回优雅关闭函数
 	return tp.Shutdown, nil

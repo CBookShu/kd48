@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
-	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/gofiber/contrib/websocket"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type WsMessage struct {
@@ -23,10 +23,11 @@ type WsResponse struct {
 
 type Handler struct {
 	userClient userv1.UserServiceClient
+	tracer     trace.Tracer
 }
 
-func NewHandler(userClient userv1.UserServiceClient) *Handler {
-	return &Handler{userClient: userClient}
+func NewHandler(userClient userv1.UserServiceClient, tracer trace.Tracer) *Handler {
+	return &Handler{userClient: userClient, tracer: tracer}
 }
 
 // ServeWS 处理 WebSocket 循环读写
@@ -34,16 +35,10 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 	// 1. 从 Fiber Locals 中获取已经握手成功的连接对象
 
 	// 2. 【关键】脱离 fasthttp 的 context 复用池，创建长连接独享的 context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, span := h.tracer.Start(context.Background(), "WS.Session")
+	defer span.End()
 
-	// 3. 为这个长链接生成并注入独立的 TraceID
-	ctx = otelkit.InjectTraceIDToCtx(ctx)
-	traceID := "N/A"
-	if tid, ok := ctx.Value("trace_id").(string); ok {
-		traceID = tid
-	}
-	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP(), "trace_id", traceID)
+	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP())
 
 	// 4. 读循环
 	var msgType int

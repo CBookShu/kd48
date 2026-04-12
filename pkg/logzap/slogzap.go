@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -33,15 +34,17 @@ func New(level string) *ZapHandler {
 	cfg := zap.NewProductionConfig()
 	cfg.Encoding = "json"
 	cfg.EncoderConfig.TimeKey = "ts"
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	core, err := cfg.Build(zap.AddCallerSkip(2))
+	// 优化命名：Build 返回的是 *zap.Logger
+	baseLogger, err := cfg.Build(zap.AddCallerSkip(3))
 	if err != nil {
 		panic(err)
 	}
 
 	return &ZapHandler{
 		level:  l,
-		logger: core,
+		logger: baseLogger,
 	}
 }
 
@@ -50,10 +53,11 @@ func (h *ZapHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ZapHandler) Handle(ctx context.Context, r slog.Record) error {
-	// 提取 TraceID (预留 OTel 接口)
+	// 【核心修改】使用标准 OTel API 提取 TraceID
 	traceId := "N/A"
-	if tid, ok := ctx.Value("trace_id").(string); ok && tid != "" {
-		traceId = tid
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		traceId = spanCtx.TraceID().String()
 	}
 
 	fields := []zapcore.Field{
@@ -108,7 +112,7 @@ func appendAttrToFields(fields []zapcore.Field, attr slog.Attr) []zapcore.Field 
 		return fields
 	}
 
-	// 处理 Group (为了保持 JSON 嵌套结构，直接走 zap.Any 反射，最安全稳定)
+	// 处理 Group
 	if attr.Value.Kind() == slog.KindGroup {
 		return append(fields, zap.Any(attr.Key, attr.Value.Group()))
 	}
