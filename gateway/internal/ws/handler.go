@@ -129,6 +129,11 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 			continue
 		}
 
+		if isAuthRoute {
+			meta.isAuthenticated = true
+			conn.SetReadDeadline(time.Time{})
+		}
+
 		// 6. 成功响应：Proto 转 标准 JSON Map (防止前端拿到 proto 的特殊字段如 @type)
 		var data interface{}
 		if resp != nil {
