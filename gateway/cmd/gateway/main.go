@@ -10,11 +10,13 @@ import (
 	"time"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/CBookShu/kd48/gateway/internal/ws" // 🚨 新增：引入 ws 包用于构建路由
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/rediskit"
 	"github.com/CBookShu/kd48/pkg/registry"
+
 	"github.com/gofiber/fiber/v2"
 	"go.etcd.io/etcd/client/v3/naming/resolver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -58,16 +60,17 @@ func main() {
 	}
 	defer etcdCli.Close()
 
-	// 1. gRPC 连接
+	// 3. gRPC 连接池
 	etcdResolverBuilder, err := resolver.NewBuilder(etcdCli)
 	if err != nil {
 		panic(err)
 	}
 	grpcresolver.Register(etcdResolverBuilder)
+
 	conn, err := grpc.Dial(
 		"etcd:///kd48/user-service",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`), // 轮询负载均衡
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
@@ -81,14 +84,31 @@ func main() {
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
-	// 2. 初始化 Fiber App
+	// ==========================================
+	// 🚨 核心重构：动态路由表组装 (显式契约注入)
+	// ==========================================
+	wsRouter := ws.NewWsRouter()
+
+	// 将 gRPC 方法包装并注册到网关路由 (一行代码接入一个接口)
+	wsRouter.Register("/user.v1.UserService/Login", ws.WrapUnary(userClient.Login))
+
+	// 💡 后续如果有 Room Service，只需在此追加：
+	// roomClient := roomv1.NewRoomServiceClient(roomConn)
+	// wsRouter.Register("/room.v1.RoomService/CreateRoom", ws.WrapUnary(roomClient.CreateRoom))
+
+	// 将路由表注入给网关 Handler
+	wsHandler := ws.NewHandler(tracer, wsRouter)
+	// ==========================================
+
+	// 4. 初始化 Fiber App
 	app := fiber.New(fiber.Config{
-		// 关闭 Fiber 启动时的 ASCII Banner，保持日志整洁
 		DisableStartupMessage: true,
 	})
-	SetupRoutes(app, userClient, tracer)
 
-	// 4. 启动服务
+	// 5. 挂载路由 (不再需要把具体的 userClient 传给路由层)
+	SetupRoutes(app, wsHandler)
+
+	// 6. 启动服务
 	go func() {
 		slog.Info("Gateway Fiber WS server listening", "port", c.Gateway.Port)
 		if err := app.Listen(fmt.Sprintf(":%d", c.Gateway.Port)); err != nil {
@@ -101,6 +121,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
 	slog.Info("Shutting down server...")
 	if err := app.ShutdownWithTimeout(5 * time.Second); err != nil {
 		slog.Error("Fiber shutdown error", "error", err)
