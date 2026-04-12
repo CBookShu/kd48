@@ -51,16 +51,15 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 	}
 	h.clients.Store(connID, meta)
 
-	// 确保连接断开时清理内存档案
-	defer func() {
-		h.clients.Delete(connID)
-		conn.Close()
-		slog.Info("WebSocket connection closed and cleaned up", "conn_id", connID)
-	}()
-
 	// 【关键】脱离 fasthttp 的 context 复用池，创建长连接独享的 context
 	ctx, span := h.tracer.Start(context.Background(), "WS.Session")
 	defer span.End()
+
+	defer func() {
+		h.clients.Delete(connID)
+		conn.Close()
+		slog.InfoContext(ctx, "WebSocket connection closed and cleaned up", "conn_id", connID)
+	}()
 
 	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP())
 
