@@ -1,0 +1,10 @@
+-- +migrate Up
+CREATE TABLE `users` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `username` VARCHAR(64) NOT NULL COMMENT '用户名，唯一',
+    `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt 加密后的密码',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

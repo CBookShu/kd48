@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
+	"sync/atomic"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/gofiber/contrib/websocket"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/status"
 )
 
 type WsMessage struct {
@@ -21,9 +24,20 @@ type WsResponse struct {
 	Data   interface{} `json:"data"`
 }
 
+// clientMeta 维护单个 WebSocket 连接的网关级状态
+type clientMeta struct {
+	connID          uint64
+	conn            *websocket.Conn
+	isAuthenticated bool
+	userID          int64  // 预留：后续强踢、消息路由使用
+	token           string // 预留：后续强踢、会话恢复使用
+}
+
 type Handler struct {
-	userClient userv1.UserServiceClient
-	tracer     trace.Tracer
+	userClient  userv1.UserServiceClient
+	tracer      trace.Tracer
+	clients     sync.Map // map[connID]*clientMeta
+	connCounter atomic.Uint64
 }
 
 func NewHandler(userClient userv1.UserServiceClient, tracer trace.Tracer) *Handler {
@@ -33,6 +47,19 @@ func NewHandler(userClient userv1.UserServiceClient, tracer trace.Tracer) *Handl
 // ServeWS 处理 WebSocket 循环读写
 func (h *Handler) ServeWS(conn *websocket.Conn) {
 	// 1. 从 Fiber Locals 中获取已经握手成功的连接对象
+	connID := h.connCounter.Add(1)
+	meta := &clientMeta{
+		connID: connID,
+		conn:   conn,
+	}
+	h.clients.Store(connID, meta)
+
+	// 确保连接断开时清理内存档案
+	defer func() {
+		h.clients.Delete(connID)
+		conn.Close()
+		slog.Info("WebSocket connection closed and cleaned up", "conn_id", connID)
+	}()
 
 	// 2. 【关键】脱离 fasthttp 的 context 复用池，创建长连接独享的 context
 	ctx, span := h.tracer.Start(context.Background(), "WS.Session")
@@ -40,7 +67,7 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 
 	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP())
 
-	// 4. 读循环
+	// 3. 读循环
 	var msgType int
 	var msg []byte
 	var err error
@@ -63,32 +90,62 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 
 		slog.InfoContext(ctx, "Received WS message", "action", req.Action, "payload", string(msg))
 
+		// ==========================================
+		// 🚨 新增：网关级未认证拦截守卫
+		// ==========================================
+		if req.Action != "login" && !meta.isAuthenticated {
+			slog.WarnContext(ctx, "Unauthenticated client blocked by gateway", "attempted_action", req.Action)
+			h.sendError(ctx, conn, "unauthorized: please login first")
+			continue
+		}
+		// ==========================================
+
 		switch req.Action {
 		case "login":
-			h.handleLogin(ctx, conn, req.Data)
+			// 修改点：传入 meta 而不是 conn
+			h.handleLogin(ctx, meta, req.Data)
+		// case "ping": // 预留：心跳
+		// case "chat": // 预留：聊天
 		default:
 			h.sendError(ctx, conn, "unknown action: "+req.Action)
 		}
 	}
-
-	return
 }
 
-func (h *Handler) handleLogin(ctx context.Context, conn *websocket.Conn, data json.RawMessage) {
+// handleLogin 处理登录逻辑
+// 修改点：参数 conn 变更为 meta
+func (h *Handler) handleLogin(ctx context.Context, meta *clientMeta, data json.RawMessage) {
 	var req userv1.LoginRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		h.sendError(ctx, conn, "invalid login params")
+		h.sendError(ctx, meta.conn, "invalid login params")
 		return
 	}
 
 	resp, err := h.userClient.Login(ctx, &req)
 	if err != nil {
 		slog.ErrorContext(ctx, "gRPC Login failed", "error", err)
-		h.sendError(ctx, conn, "internal server error")
+		// 1. 尝试解包 gRPC 的标准错误
+		sts, ok := status.FromError(err)
+		if ok {
+			// 解包成功：说明是后端微服务主动抛出的业务/逻辑错误
+			// 直接把后端写好的真实 Message 原封不动丢给前端
+			h.sendError(ctx, meta.conn, sts.Message())
+		} else {
+			// 解包失败：说明压根没走到后端（比如网关到后端的网络断了、DNS 解析失败等底层灾难）
+			// 这种情况才给前端返回真正的 internal server error
+			h.sendError(ctx, meta.conn, "gateway internal error: service unavailable")
+		}
 		return
 	}
 
-	h.sendSuccess(ctx, conn, "login_reply", map[string]interface{}{
+	// ==========================================
+	// 🚨 新增：登录成功，在网关内存打上“已认证”烙印
+	// ==========================================
+	meta.isAuthenticated = true
+	meta.token = resp.Token
+	// ==========================================
+
+	h.sendSuccess(ctx, meta.conn, "login_reply", map[string]interface{}{
 		"success": resp.Success,
 		"token":   resp.Token,
 	})

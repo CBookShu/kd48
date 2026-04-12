@@ -2,18 +2,23 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
@@ -33,6 +38,24 @@ func main() {
 	}
 	defer shutdown(context.Background())
 
+	db, err := sql.Open("mysql", c.MySQL.DSN)
+	if err != nil {
+		panic(fmt.Errorf("failed to open mysql: %w", err))
+	}
+	defer db.Close()
+
+	// 2. 显式初始化 Redis
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     c.Redis.Addr,
+		Password: c.Redis.Password,
+		DB:       c.Redis.DB,
+	})
+	defer rdb.Close()
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		panic(fmt.Errorf("failed to ping redis: %w", err))
+	}
+	slog.Info("Redis connected successfully")
+
 	// 1. 启动 gRPC Server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.UserService.Port))
 	if err != nil {
@@ -42,7 +65,9 @@ func main() {
 	s := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
-	userv1.RegisterUserServiceServer(s, &userService{})
+
+	queries := sqlc.New(db)
+	userv1.RegisterUserServiceServer(s, NewUserService(queries, rdb, time.Duration(c.Session.ExpireHours)*time.Hour))
 
 	go func() {
 		slog.Info("User Service gRPC server listening", "port", c.UserService.Port)

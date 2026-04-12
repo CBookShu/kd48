@@ -1,0 +1,29 @@
+server:
+  name: "kd48"
+  env: "dev"
+
+gateway:
+  port: 8080
+
+user_service:
+  port: 9000
+
+log:
+  level: "debug" # debug, info, warn, error
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "localhost:2379"
+
+mysql:
+  # 本地开发 DSN，开启 parseTime 是为了让 sqlc 生成的代码能正确处理 time.Time
+  dsn: "root:root@tcp(localhost:3306)/kd48?parseTime=true&loc=Local"
+
+session:
+  # Token 过期时间（小时）
+  expire_hours: 168 # 7天

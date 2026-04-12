@@ -1,3 +1,0 @@
-1. log 格式化: 时间，caller ,format(%v)
-    {"level":"info","ts":1775891513.0324612,"caller":"slog/logger.go:296","msg":"Gateway fully booted, all dependencies ready","trace_id":"d43ffcbab5983ceb24d61008ad70bd63","redis":"localhost:6379","etcd":"[localhost:2379]","port":8080}
-

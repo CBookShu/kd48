@@ -14,6 +14,8 @@ type Config struct {
 	Log         LogConf         `mapstructure:"log"`
 	Redis       RedisConf       `mapstructure:"redis"`
 	Etcd        EtcdConf        `mapstructure:"etcd"`
+	MySQL       MysqlConf       `mapstructure:"mysql"`
+	Session     SessionConf     `mapstructure:"session"`
 }
 
 type ServerConf struct {
@@ -41,6 +43,14 @@ type RedisConf struct {
 
 type EtcdConf struct {
 	Endpoints []string `mapstructure:"endpoints"`
+}
+
+type MysqlConf struct {
+	DSN string `mapstructure:"dsn"`
+}
+
+type SessionConf struct {
+	ExpireHours int64 `mapstructure:"expire_hours"`
 }
 
 // Load 加载配置文件
