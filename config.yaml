@@ -10,6 +10,7 @@ user_service:
 
 log:
   level: "debug" # debug, info, warn, error
+  file_path: "./logs" 
 
 redis:
   addr: "localhost:6379"

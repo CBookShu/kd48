@@ -3,3 +3,5 @@ go.work.sum
 go.work
 bin/
 .vscode/
+logs/
+*.bin

@@ -31,8 +31,10 @@ type UserServiceConf struct {
 	Port int `mapstructure:"port"`
 }
 
+// 🚨 修改点：增加 FilePath 字段
 type LogConf struct {
-	Level string `mapstructure:"level"`
+	Level    string `mapstructure:"level"`
+	FilePath string `mapstructure:"file_path"` // 例如: ./logs/app.log
 }
 
 type RedisConf struct {
@@ -58,7 +60,6 @@ func Load(path string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
-
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config error: %w", err)
 	}

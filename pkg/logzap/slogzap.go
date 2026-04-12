@@ -3,11 +3,14 @@ package logzap
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type ZapHandler struct {
@@ -15,7 +18,7 @@ type ZapHandler struct {
 	logger *zap.Logger
 }
 
-func New(level string) *ZapHandler {
+func New(level string, filePath string) *ZapHandler {
 	var l slog.Leveler
 	switch strings.ToLower(level) {
 	case "debug":
@@ -30,17 +33,66 @@ func New(level string) *ZapHandler {
 		l = slog.LevelInfo
 	}
 
-	// 使用 Zap 新版标准配置方式
-	cfg := zap.NewProductionConfig()
-	cfg.Encoding = "json"
-	cfg.EncoderConfig.TimeKey = "ts"
-	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
-	// 优化命名：Build 返回的是 *zap.Logger
-	baseLogger, err := cfg.Build(zap.AddCallerSkip(3))
-	if err != nil {
-		panic(err)
+	// 将 slog.Level 转换为 zap.Level，用于控制底层 Core
+	var zapLevel zapcore.Level
+	switch l {
+	case slog.LevelDebug:
+		zapLevel = zapcore.DebugLevel
+	case slog.LevelInfo:
+		zapLevel = zapcore.InfoLevel
+	case slog.LevelWarn:
+		zapLevel = zapcore.WarnLevel
+	case slog.LevelError:
+		zapLevel = zapcore.ErrorLevel
+	default:
+		zapLevel = zapcore.InfoLevel
 	}
+
+	// 🚨 修改点：精细化控制输出格式
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "ts"
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder   // 人类可读时间：2024-01-01T15:04:05.000Z
+	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder // 短路径 Caller：slogzap/logzap.go:25
+	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder // 大写 INFO/WARN
+
+	jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
+
+	consoleEncoderConfig := encoderConfig
+	// 终端日志加上颜色区分级别 (比如 ERROR 是红色，INFO 是蓝色)
+	consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
+
+	// 🚨 修改点：构建多目标 Core (Tee)
+	var cores []zapcore.Core
+
+	// 目标 1：标准输出 (保持原样)
+	cores = append(cores, zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), zapLevel))
+
+	// 目标 2：文件输出
+	if filePath != "" {
+		dir := filepath.Dir(filePath)
+		// 启动时自动创建日志目录
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			// 此时 slog 可能还没完全就绪，直接写 stderr
+			os.Stderr.WriteString("Failed to create log dir: " + err.Error() + "\n")
+		} else {
+			// 引入 lumberjack 实现滚动切割
+			hook := &lumberjack.Logger{
+				Filename:   filePath,
+				MaxSize:    100,  // MB
+				MaxBackups: 3,    // 保留旧文件最大个数
+				MaxAge:     30,   // 保留最大天数
+				Compress:   true, // 是否压缩
+			}
+			cores = append(cores, zapcore.NewCore(jsonEncoder, zapcore.AddSync(hook), zapLevel))
+		}
+	}
+
+	// 合并 Core
+	core := zapcore.NewTee(cores...)
+
+	// 构造底层 Logger (保留原有的 CallerSkip 以对齐业务代码行号)
+	baseLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(3))
 
 	return &ZapHandler{
 		level:  l,
@@ -53,7 +105,6 @@ func (h *ZapHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ZapHandler) Handle(ctx context.Context, r slog.Record) error {
-	// 【核心修改】使用标准 OTel API 提取 TraceID
 	traceId := "N/A"
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.IsValid() {
@@ -64,13 +115,11 @@ func (h *ZapHandler) Handle(ctx context.Context, r slog.Record) error {
 		zap.String("trace_id", traceId),
 	}
 
-	// 提取 slog 的附加属性
 	r.Attrs(func(attr slog.Attr) bool {
 		fields = appendAttrToFields(fields, attr)
 		return true
 	})
 
-	// 映射 slog.Level 到 zap.Level
 	var zapLevel zapcore.Level
 	switch {
 	case r.Level >= slog.LevelError:
@@ -83,7 +132,6 @@ func (h *ZapHandler) Handle(ctx context.Context, r slog.Record) error {
 		zapLevel = zapcore.DebugLevel
 	}
 
-	// 使用 zap 的高层 Check/Write 机制
 	if ce := h.logger.Check(zapLevel, r.Message); ce != nil {
 		ce.Write(fields...)
 	}
@@ -106,18 +154,14 @@ func (h *ZapHandler) WithGroup(name string) slog.Handler {
 	return &clone
 }
 
-// appendAttrToFields 将 slog.Attr 转换为 zap.Field
 func appendAttrToFields(fields []zapcore.Field, attr slog.Attr) []zapcore.Field {
 	if attr.Equal(slog.Attr{}) {
 		return fields
 	}
-
-	// 处理 Group
 	if attr.Value.Kind() == slog.KindGroup {
 		return append(fields, zap.Any(attr.Key, attr.Value.Group()))
 	}
 
-	// 常规类型强转（零反射开销）
 	switch attr.Value.Kind() {
 	case slog.KindString:
 		return append(fields, zap.String(attr.Key, attr.Value.String()))

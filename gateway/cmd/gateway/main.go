@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -33,7 +34,8 @@ func main() {
 	}
 
 	// 1. 初始化日志
-	handler := logzap.New(c.Log.Level)
+	logPath := filepath.Join(c.Log.FilePath, "gateway.log")
+	handler := logzap.New(c.Log.Level, logPath)
 	slog.SetDefault(slog.New(handler))
 
 	// 2. 初始化 OTel

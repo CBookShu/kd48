@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -29,7 +30,8 @@ func main() {
 		panic(err)
 	}
 
-	handler := logzap.New(c.Log.Level)
+	logPath := filepath.Join(c.Log.FilePath, "user-service.log")
+	handler := logzap.New(c.Log.Level, logPath)
 	slog.SetDefault(slog.New(handler))
 
 	shutdown, err := otelkit.InitTracer(c.Server.Name + "-user-service")
