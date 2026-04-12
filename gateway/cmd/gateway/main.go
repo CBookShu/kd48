@@ -7,15 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
-	"github.com/CBookShu/kd48/gateway/internal/ws"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/rediskit"
 	"github.com/CBookShu/kd48/pkg/registry"
-	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"go.etcd.io/etcd/client/v3/naming/resolver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -87,25 +86,7 @@ func main() {
 		// 关闭 Fiber 启动时的 ASCII Banner，保持日志整洁
 		DisableStartupMessage: true,
 	})
-
-	// 3. 注册路由
-	// 健康检查
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.SendString("ok")
-	})
-
-	// WebSocket 路由
-	// 必须先经过 IsWebSocketUpgrade 中间件拦截非 WS 请求
-	app.Use("/ws", func(c *fiber.Ctx) error {
-		if websocket.IsWebSocketUpgrade(c) {
-			return c.Next()
-		}
-		return fiber.ErrUpgradeRequired
-	})
-
-	wsHandler := ws.NewHandler(userClient, tracer)
-	// websocket.New 会自动完成握手，并将 conn 存入 c.Locals("websocket")
-	app.Get("/ws", websocket.New(wsHandler.ServeWS))
+	SetupRoutes(app, userClient, tracer)
 
 	// 4. 启动服务
 	go func() {
@@ -121,4 +102,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	slog.Info("Shutting down server...")
+	if err := app.ShutdownWithTimeout(5 * time.Second); err != nil {
+		slog.Error("Fiber shutdown error", "error", err)
+	}
 }
