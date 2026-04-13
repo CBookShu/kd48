@@ -254,6 +254,76 @@ service GatewayIngress {
 - **抖动**：路由或类型频繁变更时 **防抖/批处理**，避免连接风暴。
 - **失败策略**：Watch 断连时 **重连 + 全量拉取**（fallback），避免静默空表。
 
+### 11.4 冷启动：Bootstrap 顺序（规范）
+
+以下顺序 **须遵守**，保证「先有连接池、再有路由」，避免路由引用不存在的 `service_type`。
+
+1. **建立 Etcd 客户端**（超时、TLS、认证等与现有 `pkg/registry` 或等价配置对齐）。
+2. **全量加载服务类型**：对前缀 `kd48/meta/service-types/` 做 **Range（带 revision）**，解析每条值为 **`ServiceTypeSpec`**（protojson）。
+3. **校验类型（v0.1）**：对每条执行 §8.3 规则；**失败单条**：记录错误并 **跳过该 key**（或 **整体失败** 策略二选一，须在实现中固定一种并文档化；**推荐开发环境跳过、生产环境可选严格失败**）。
+4. **构建连接池**：对每个 **有效** `type_key`：`grpc.Dial(spec.discovery.grpc_etcd_target, …)`，得到 **`ClientConn`**，存入 **`pool[type_key]`**；并为每类创建 **`GatewayIngressClient`**（或等价接口）。
+5. **全量加载 WS 路由**：对前缀 `kd48/meta/gateway-routes/` Range（带 revision）。
+6. **校验路由**：`schema_version`；`route_id` 与 key 后缀一致；`ws_method` **非空**；`ingress_route` **非空**；**`service_type` 必须 ∈ `pool` 且对应类型已校验为 `STATELESS_LB`**；否则跳过或严格失败（与步骤 3 策略一致）。
+7. **构建运行时路由视图**：内存结构至少包含：`ws_method` → `{ ingress_client 或 conn + WrapIngress 所需参数, ingress_route, public }`。
+8. **注入 `WsRouter` 与 Handler**：注册 **`WsHandlerFunc`**；若 Handler 仍用后缀白名单，**过渡期保留**；最终实现应改为 **按 `ws_method` 查表得 `public`**（见 **§11.9**）。
+9. **启动 Watch**：在持有 **bootstrap revision** 之后，分别对 **服务类型前缀**、**路由前缀** 建立 **Watch**（可合并为单个 watcher + 按 key 分流，实现任选）。
+
+### 11.5 全量与增量（Revision）
+
+- **Bootstrap** 的 Range 必须记录 **返回的 `revision`**（或各前缀各自 revision，若分开 Range）。
+- **Watch** 从 **`revision + 1`** 起订阅；事件类型 **PUT/DELETE** 均需处理。
+- **断连或 `compact revision` 过期**：**禁止** 假设本地快照仍完整；必须 **退化为全量 Range + 重建内存视图 + 重建/复用 ClientConn**（见 **§11.8**），再重新 Watch。
+
+### 11.6 服务类型变更（热更新）
+
+| 事件 | 行为（规范） |
+|------|----------------|
+| **新增类型** | 校验 → `Dial` → 加入 `pool`；**不自动** 启用路由，直至路由 Watch 到引用该类型的条目 |
+| **修改类型** | 视为 **替换**：对 **新 spec** 校验 → **新建** `ClientConn`（或 target 未变则复用）→ **切换引用** → 旧 conn **进入 draining**（§11.8）后 `Close` |
+| **删除类型** | **须先** 无路由引用（实现可拒绝删除或网关侧将受影响路由标为 **503**）；通过后 **draining** 关闭 conn，从 `pool` 移除 |
+
+**同一 `type_key` 并发写**：以 **Etcd 修订号较大者** 或 **后到达事件** 为准（实现须 **幂等**）。
+
+### 11.7 WS 路由变更（热更新）
+
+- **按 key 粒度** 更新内存表：`route_id` 即 Etcd key 后缀；**DELETE** 则移除对应 `ws_method` 映射。
+- **`ws_method` 冲突**（两条路由指向同一 `ws_method`）：Bootstrap 与每次增量合并后 **须检测**；**推荐**：拒绝后写者（日志 + 指标）或 **显式定义「按 `route_id` 字典序后者获胜」**——**实现必须选一种并写死**。
+- **原子暴露**：对前端路由表采用 **`atomic.Value` 持有不可变 snapshot** 或 **`sync.RWMutex` + 深拷贝替换**，保证 **读路径（每条 WS 消息）无锁或读锁**，避免长时间阻塞。
+
+### 11.8 `ClientConn` 生命周期（draining）
+
+| 状态 | 含义 |
+|------|------|
+| **active** | 可接新 RPC |
+| **draining** | **不接新 RPC**；已在途 RPC **允许完成**（设 **上限等待时间**，超时后 `Close` 并记录） |
+| **closed** | 已关闭，不得再使用 |
+
+**类型 target 变更或类型删除** 时必须经 **draining**，避免泄漏连接与 **在途请求** 误打到旧集群。
+
+### 11.9 鉴权与 `GatewayRouteSpec.public` 的衔接（规范）
+
+- **目标**：淘汰 Handler 内 **`strings.HasSuffix(..., "/Login")`** 一类硬编码。
+- **读路径**：根据 **`req.Method`（WS 信封）** 在 **当前路由 snapshot** 中查找；若 **无路由**：保持现有 **404/unknown** 行为。
+- **`public == true`**：允许未认证连接调用该 `ws_method`。
+- **`public == false`**：与现网一致，未认证则 **拒绝**（错误码与是否断连保持现有 §3.3 策略）。
+- **路由表中未找到** 且未认证：按 **unknown method** 或 **unauthorized** 的优先级须在实现中 **固定**（推荐：**先鉴权**——未登录且非 public 列表则 unauthorized，与现逻辑兼容需单独对账）。
+
+**过渡期**：允许 **「Etcd 路由未启用」** 时回退 **硬编码 public 方法表**（与配置开关绑定）。
+
+### 11.10 降级与健康
+
+| 场景 | 建议策略 |
+|------|----------|
+| **启动时 Etcd 不可达** | **默认 fail-fast**（进程退出，由编排重启）；可选 **本地快照 YAML** 仅用于 **灾备**，须在配置中 **显式开启** |
+| **运行中 Etcd 断连** | **保留最后一致 snapshot** 继续服务；**健康检查** 置 **unready**；恢复后 **全量 resync** |
+| **部分 key 解析失败** | **指标 + 日志**；是否 **整表拒绝** 与 §11.4 步骤 3 策略一致 |
+
+### 11.11 可观测性（规范）
+
+- **计数器**：类型加载失败数、路由加载失败数、Watch 重连次数、draining 超时次数。
+- **日志**：每次 **全量 resync**、每次 **连接池替换**（含 `type_key`、old/new target 摘要）。
+- **追踪**：可选将 **`route_id` / `type_key`** 写入 OTel attribute（实现阶段）。
+
 ---
 
 ## 12. 对 `spec.md` 的修订建议（合并前审阅）
@@ -265,6 +335,7 @@ service GatewayIngress {
 5. **运维与网关**：网关对 **类型与路由** 的 **Etcd Watch 热更新** 方向（与本文 §8～§11 一致）。
 6. **服务类型 Schema**：在 `api/proto/gateway/v1/service_type.proto` 定义 **`ServiceTypeSpec`**；Etcd 存 **protojson** 化 JSON。
 7. **WS 路由 Schema**：在 `api/proto/gateway/v1/gateway_route.proto` 定义 **`GatewayRouteSpec`**；含 **`public`** 与 **`service_type`** 引用。
+8. **网关动态配置**：Bootstrap 顺序、Watch/revision、**draining**、`public` 与 Handler 衔接、降级与健康（与本文 **§11.4～§11.11** 一致）。
 
 ---
 
@@ -277,3 +348,4 @@ service GatewayIngress {
 | 2026-04-13 | 增补：逻辑服务类型 vs 实例；`routing_mode`（无状态 LB / 有状态抵达）；Etcd 键空间草案；网关 Watch 热更新与不依赖重启原则；§4 与 §2 表格对齐。 |
 | 2026-04-13 | 服务类型：以 `service_type.proto`（`ServiceTypeSpec`）为 SSOT，Etcd 存 protojson JSON；v0.1 仅启用 `STATELESS_LB`（选项 A）。 |
 | 2026-04-13 | WS 路由：`gateway_route.proto` 中 `GatewayRouteSpec`；Etcd protojson；§4.1 与 `public`/类型引用约定。 |
+| 2026-04-13 | §11 细化：冷启动 bootstrap、revision 与全量重同步、类型/路由热更、`ClientConn` draining、`public` 与鉴权衔接、降级与健康、可观测性。 |
