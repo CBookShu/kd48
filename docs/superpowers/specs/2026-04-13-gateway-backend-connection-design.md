@@ -104,8 +104,28 @@ service GatewayIngress {
 ## 4. 路由与配置
 
 - **路由表** 来源：演进目标为 **Etcd 托管 + Watch 热更新**（见 **§11**）；过渡期可为 **代码注册** 或 **本地 YAML**，与 Etcd 中 **结构对齐** 以便迁移。
-- **最小字段**：`ws_method`（或 route_id）、**逻辑服务类型键** `service_type`（见 §8）、`ingress_route`（写入 `IngressRequest.route`）、**是否免鉴权** `public`（替代 handler 内后缀硬编码）。
-- **与类型的关系**：路由项引用 **服务类型**；由类型解析 **gRPC 发现 target**（如 `etcd:///kd48/user-service`）及 **routing_mode**（见 §9）。
+- **与类型的关系**：路由项引用 **服务类型** `service_type`（`ServiceTypeSpec.type_key`）；由类型解析 **gRPC 发现 target** 及 **routing_mode**（见 §8～§9）。
+- **鉴权**：`GatewayRouteSpec.public == true` 的条目 **免鉴权**；否则须已认证——用于替代 `handler` 内 **后缀 `/Login`、`/Register`** 硬编码（实现 Watch 后落地）。
+
+### 4.1 路由 SSOT：`GatewayRouteSpec`（Proto + Etcd JSON）
+
+- **Proto**：`api/proto/gateway/v1/gateway_route.proto` 中的 **`GatewayRouteSpec`**。
+- **Etcd 键**：`kd48/meta/gateway-routes/{route_id}`；**值**：`GatewayRouteSpec` 的 **protojson** UTF-8 JSON。
+- **网关 v0.1 加载（建议）**：`schema_version == 1`；`route_id` 与 key 一致；`ws_method` 唯一（冲突则拒收或后写覆盖策略由实现定）；`service_type` 须能关联到已加载的 **`ServiceTypeSpec`** 且为 **STATELESS_LB**。
+
+**Etcd 值示例（protojson）**：
+
+```json
+{
+  "schemaVersion": 1,
+  "routeId": "user-login",
+  "wsMethod": "/user.v1.UserService/Login",
+  "serviceType": "user",
+  "ingressRoute": "/user.v1.UserService/Login",
+  "public": true,
+  "displayName": "Login"
+}
+```
 
 ---
 
@@ -208,7 +228,7 @@ service GatewayIngress {
 | 用途 | 示意前缀 / Key 模式 | 值内容（示意） |
 |------|---------------------|----------------|
 | **服务类型定义** | `kd48/meta/service-types/{type_key}` | **JSON**：`ServiceTypeSpec` 的 **protojson** 形式（见 `gateway/v1/service_type.proto`） |
-| **WS 路由** | `kd48/meta/gateway-routes/{route_id}` 或单 key 下列表 | `ws_method`、`service_type`、`ingress_route`、`public` |
+| **WS 路由** | `kd48/meta/gateway-routes/{route_id}` | **JSON**：`GatewayRouteSpec` 的 protojson（见 `gateway/v1/gateway_route.proto`） |
 | **实例注册**（现有） | `kd48/user-service/…`（与 `etcd:///kd48/user-service` 解析规则一致） | 地址与租约 |
 
 **说明**：**类型与路由** 与 **实例注册** 分 subtree，避免与 resolver 扫描实例的逻辑混淆。
@@ -244,6 +264,7 @@ service GatewayIngress {
 4. **§3 / 注册发现**：区分 **逻辑服务类型（运维维护）** 与 **实例自注册**；补充 **有状态** 不得仅依赖无差别前缀轮询。
 5. **运维与网关**：网关对 **类型与路由** 的 **Etcd Watch 热更新** 方向（与本文 §8～§11 一致）。
 6. **服务类型 Schema**：在 `api/proto/gateway/v1/service_type.proto` 定义 **`ServiceTypeSpec`**；Etcd 存 **protojson** 化 JSON。
+7. **WS 路由 Schema**：在 `api/proto/gateway/v1/gateway_route.proto` 定义 **`GatewayRouteSpec`**；含 **`public`** 与 **`service_type`** 引用。
 
 ---
 
@@ -255,3 +276,4 @@ service GatewayIngress {
 | 2026-04-13 | 已按实现计划落地：`gateway.v1 GatewayIngress`、User 内分发 Login/Register、网关 `WrapIngress` + `WsHandlerResult`，网关 `main` 不再 import `user/v1` 客户端。 |
 | 2026-04-13 | 增补：逻辑服务类型 vs 实例；`routing_mode`（无状态 LB / 有状态抵达）；Etcd 键空间草案；网关 Watch 热更新与不依赖重启原则；§4 与 §2 表格对齐。 |
 | 2026-04-13 | 服务类型：以 `service_type.proto`（`ServiceTypeSpec`）为 SSOT，Etcd 存 protojson JSON；v0.1 仅启用 `STATELESS_LB`（选项 A）。 |
+| 2026-04-13 | WS 路由：`gateway_route.proto` 中 `GatewayRouteSpec`；Etcd protojson；§4.1 与 `public`/类型引用约定。 |
