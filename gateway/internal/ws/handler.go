@@ -64,19 +64,26 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP())
 
 	handshakeTimeout := 10 * time.Second
-	conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
 
 	var msgType int
 	var msg []byte
 	var err error
 
 	for {
+		if meta.isAuthenticated {
+			conn.SetReadDeadline(time.Time{})
+		} else {
+			conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
+		}
+
 		if msgType, msg, err = conn.ReadMessage(); err != nil {
 			slog.ErrorContext(ctx, "WS read error, connection closed", "error", err)
 			break
 		}
 
 		if msgType != websocket.TextMessage {
+			slog.WarnContext(ctx, "Non-text message received, closing connection", "msg_type", msgType)
+			h.sendResp(ctx, conn, "", int32(codes.InvalidArgument), "non-text message received", nil)
 			break
 		}
 
@@ -131,7 +138,6 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 
 		if isAuthRoute {
 			meta.isAuthenticated = true
-			conn.SetReadDeadline(time.Time{})
 		}
 
 		// 6. 成功响应：Proto 转 标准 JSON Map (防止前端拿到 proto 的特殊字段如 @type)

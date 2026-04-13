@@ -93,6 +93,7 @@ func main() {
 
 	// 将 gRPC 方法包装并注册到网关路由 (一行代码接入一个接口)
 	wsRouter.Register("/user.v1.UserService/Login", ws.WrapUnary(userClient.Login))
+	wsRouter.Register("/user.v1.UserService/Register", ws.WrapUnary(userClient.Register))
 
 	// 💡 后续如果有 Room Service，只需在此追加：
 	// roomClient := roomv1.NewRoomServiceClient(roomConn)

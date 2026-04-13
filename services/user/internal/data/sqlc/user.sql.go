@@ -9,6 +9,20 @@ import (
 	"context"
 )
 
+const createUser = `-- name: CreateUser :exec
+INSERT INTO users (username, password_hash) VALUES (?, ?)
+`
+
+type CreateUserParams struct {
+	Username     string `json:"username"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.ExecContext(ctx, createUser, arg.Username, arg.PasswordHash)
+	return err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
 SELECT id, username, password_hash, created_at, updated_at FROM users
 WHERE username = ? LIMIT 1

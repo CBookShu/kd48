@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	CreateUser(ctx context.Context, arg CreateUserParams) error
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 }
 
