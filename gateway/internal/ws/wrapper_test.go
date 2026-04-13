@@ -1,0 +1,56 @@
+package ws
+
+import (
+	"context"
+	"testing"
+
+	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+type stubIngressClient struct {
+	lastRoute   string
+	lastPayload []byte
+	reply       *gatewayv1.IngressReply
+	err         error
+}
+
+func (s *stubIngressClient) Call(ctx context.Context, in *gatewayv1.IngressRequest, opts ...grpc.CallOption) (*gatewayv1.IngressReply, error) {
+	s.lastRoute = in.GetRoute()
+	s.lastPayload = in.GetJsonPayload()
+	return s.reply, s.err
+}
+
+func TestWrapIngress_ForwardsRouteAndPayload(t *testing.T) {
+	stub := &stubIngressClient{
+		reply: &gatewayv1.IngressReply{JsonPayload: []byte(`{"ok":true}`)},
+	}
+	h := WrapIngress(stub, "/user.v1.UserService/Login")
+	payload := []byte(`{"username":"u","password":"p"}`)
+	res, err := h(context.Background(), payload, &clientMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stub.lastRoute != "/user.v1.UserService/Login" {
+		t.Fatalf("route: %q", stub.lastRoute)
+	}
+	if string(stub.lastPayload) != string(payload) {
+		t.Fatalf("payload: %q", stub.lastPayload)
+	}
+	if res == nil || res.Message != nil {
+		t.Fatalf("want JSON branch, got %+v", res)
+	}
+	if string(res.JSON) != `{"ok":true}` {
+		t.Fatalf("json: %s", res.JSON)
+	}
+}
+
+func TestWrapIngress_PropagatesError(t *testing.T) {
+	stub := &stubIngressClient{err: status.Error(codes.PermissionDenied, "permission denied")}
+	_, err := WrapIngress(stub, "/x")(context.Background(), []byte(`{}`), &clientMeta{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // clientMeta 维护单个 WebSocket 连接的网关级状态
@@ -140,35 +139,14 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 			meta.isAuthenticated = true
 		}
 
-		// 6. 成功响应：proto.Message → JSON Map，或 Ingress 返回的原始 JSON bytes
-		var data interface{}
-		if resp != nil {
-			if resp.Message != nil {
-				marshaler := protojson.MarshalOptions{EmitUnpopulated: true}
-				jsonBytes, err := marshaler.Marshal(resp.Message)
-				if err != nil {
-					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
-					if isAuthRoute {
-						break
-					}
-					continue
-				}
-				if err := json.Unmarshal(jsonBytes, &data); err != nil {
-					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
-					if isAuthRoute {
-						break
-					}
-					continue
-				}
-			} else if len(resp.JSON) > 0 {
-				if err := json.Unmarshal(resp.JSON, &data); err != nil {
-					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
-					if isAuthRoute {
-						break
-					}
-					continue
-				}
+		// 6. 成功响应：与 response_data.go 单测对齐的转换逻辑
+		data, convErr := DataFromWsHandlerResult(resp)
+		if convErr != nil {
+			h.sendResp(ctx, conn, req.Method, int32(codes.Internal), convErr.Error(), nil)
+			if isAuthRoute {
+				break
 			}
+			continue
 		}
 
 		h.sendResp(ctx, conn, req.Method, int32(codes.OK), "success", data)
