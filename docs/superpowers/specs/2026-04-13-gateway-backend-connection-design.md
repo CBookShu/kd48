@@ -151,6 +151,31 @@ service GatewayIngress {
 - 网关启动或 Watch 更新时：先认识 **有哪些服务类型** 及各自 **发现前缀**，再为每个需要的类型建立（或更新）**`grpc.ClientConn`**。
 - **实例** 的增减由 **gRPC Resolver** 对前缀的 Watch 消化；网关 **不** 在配置里枚举每台机器。
 
+### 8.3 类型定义的 SSOT：Proto + Etcd 存 JSON（已定）
+
+- **结构约束** 以 **`api/proto/gateway/v1/service_type.proto`** 中的 `ServiceTypeSpec` 及子 message 为 **单一描述源**（与业务 proto 分离，仍属 `gateway.v1`）。
+- **Etcd 值** 仍为 **UTF-8 JSON 文本**：写入/读取时使用 **`protojson`**（`Marshal` / `Unmarshal`），与手工 `etcdctl put`、运维脚本、网关代码 **同一套字段语义**。
+- **JSON 字段名**：遵循 proto 的 **JSON 映射**（默认 camelCase 等），运维侧以生成文档或 `buf curl` / 示例为准。
+- **网关 v0.1 加载策略（已定）**：仅接受 `routing_mode == SERVICE_ROUTING_MODE_STATELESS_LB` 且 `schema_version == 1`；`discovery.grpc_etcd_target` 必填；**有状态枚举值预留于 proto 注释**，实现未就绪前 **拒收或跳过**（与讨论选项 **A** 一致）。
+
+**Etcd 值示例（protojson，字段名以生成结果为准）**：
+
+```json
+{
+  "schemaVersion": 1,
+  "typeKey": "user",
+  "displayName": "User Service",
+  "routingMode": "SERVICE_ROUTING_MODE_STATELESS_LB",
+  "discovery": {
+    "grpcEtcdTarget": "etcd:///kd48/user-service",
+    "loadBalancing": "round_robin"
+  },
+  "ingress": {
+    "useGatewayIngress": true
+  }
+}
+```
+
 ---
 
 ## 9. `routing_mode`：无状态与有状态抵达
@@ -168,10 +193,11 @@ service GatewayIngress {
   - **分片发现前缀**：Etcd 上按 shard/room 等区分子前缀，resolver + **一致性哈希** 等；
   - **有状态入口 + 内部转发**：网关只连少量路由器，由其后转到正确房间进程（多一跳）。
 
-### 9.3 类型元数据建议字段
+### 9.3 类型元数据与 Proto 枚举
 
-- **`routing_mode`**：`stateless_lb` | `stateful_direct` | `stateful_shard` | …（可扩展）。
-- **仅当 `stateless_lb`** 时，将 **Etcd 实例注册前缀** 作为默认 `grpc` target 的 scheme 路径；**有状态** 必须带 **额外规则**（如何从 WS 上下文或 payload 解析出 shard/实例）。
+- **`routing_mode`**：以 **`ServiceRoutingMode`** 枚举为准（见 `service_type.proto`）；JSON 中形如 `"routingMode": "SERVICE_ROUTING_MODE_STATELESS_LB"`（protojson 默认枚举名为字符串）。
+- **仅 `STATELESS_LB`**（v0.1 唯一启用）：**Etcd 实例注册前缀** 由 `discovery.grpc_etcd_target` 给出（如 `etcd:///kd48/user-service`）。
+- **有状态**（预留枚举值）：须另扩 `ServiceTypeSpec` 或子 message，并定义 **抵达规则**；在网关实现落地前 **不按生产加载**（选项 **A**）。
 
 ---
 
@@ -181,7 +207,7 @@ service GatewayIngress {
 
 | 用途 | 示意前缀 / Key 模式 | 值内容（示意） |
 |------|---------------------|----------------|
-| **服务类型定义** | `kd48/meta/service-types/{type_key}` | JSON：`discovery_prefix`（如 `kd48/user-service`）、`routing_mode`、`ingress` 是否必填等 |
+| **服务类型定义** | `kd48/meta/service-types/{type_key}` | **JSON**：`ServiceTypeSpec` 的 **protojson** 形式（见 `gateway/v1/service_type.proto`） |
 | **WS 路由** | `kd48/meta/gateway-routes/{route_id}` 或单 key 下列表 | `ws_method`、`service_type`、`ingress_route`、`public` |
 | **实例注册**（现有） | `kd48/user-service/…`（与 `etcd:///kd48/user-service` 解析规则一致） | 地址与租约 |
 
@@ -217,6 +243,7 @@ service GatewayIngress {
 3. **§5.2**：增加「对外暴露给网关的 Ingress 实现」作为各服务的 **接入规范** 之一。
 4. **§3 / 注册发现**：区分 **逻辑服务类型（运维维护）** 与 **实例自注册**；补充 **有状态** 不得仅依赖无差别前缀轮询。
 5. **运维与网关**：网关对 **类型与路由** 的 **Etcd Watch 热更新** 方向（与本文 §8～§11 一致）。
+6. **服务类型 Schema**：在 `api/proto/gateway/v1/service_type.proto` 定义 **`ServiceTypeSpec`**；Etcd 存 **protojson** 化 JSON。
 
 ---
 
@@ -227,3 +254,4 @@ service GatewayIngress {
 | 2026-04-13 | 初版落盘：目标 A；拓扑甲（服务可直连）；载荷甲 JSON UTF-8；默认稳定 Ingress + 内部分发；FDS/反射作备选。 |
 | 2026-04-13 | 已按实现计划落地：`gateway.v1 GatewayIngress`、User 内分发 Login/Register、网关 `WrapIngress` + `WsHandlerResult`，网关 `main` 不再 import `user/v1` 客户端。 |
 | 2026-04-13 | 增补：逻辑服务类型 vs 实例；`routing_mode`（无状态 LB / 有状态抵达）；Etcd 键空间草案；网关 Watch 热更新与不依赖重启原则；§4 与 §2 表格对齐。 |
+| 2026-04-13 | 服务类型：以 `service_type.proto`（`ServiceTypeSpec`）为 SSOT，Etcd 存 protojson JSON；v0.1 仅启用 `STATELESS_LB`（选项 A）。 |
