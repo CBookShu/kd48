@@ -21,8 +21,14 @@ type WsResponse struct {
 	Data   interface{} `json:"data"`
 }
 
+// WsHandlerResult 成功响应：Message 与 JSON 二选一（互斥）。
+type WsHandlerResult struct {
+	Message proto.Message // 非 nil 时走 protojson → Data
+	JSON    []byte        // Message==nil 且 len(JSON)>0 时直接 json.Unmarshal 到 Data
+}
+
 // WsHandlerFunc 网关业务处理器的统一签名
-type WsHandlerFunc func(ctx context.Context, payload []byte, meta *clientMeta) (proto.Message, error)
+type WsHandlerFunc func(ctx context.Context, payload []byte, meta *clientMeta) (*WsHandlerResult, error)
 
 // WsRouter 动态路由表
 type WsRouter struct {

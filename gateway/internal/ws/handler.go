@@ -140,12 +140,35 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 			meta.isAuthenticated = true
 		}
 
-		// 6. 成功响应：Proto 转 标准 JSON Map (防止前端拿到 proto 的特殊字段如 @type)
+		// 6. 成功响应：proto.Message → JSON Map，或 Ingress 返回的原始 JSON bytes
 		var data interface{}
 		if resp != nil {
-			marshaler := protojson.MarshalOptions{EmitUnpopulated: true}
-			jsonBytes, _ := marshaler.Marshal(resp)
-			json.Unmarshal(jsonBytes, &data)
+			if resp.Message != nil {
+				marshaler := protojson.MarshalOptions{EmitUnpopulated: true}
+				jsonBytes, err := marshaler.Marshal(resp.Message)
+				if err != nil {
+					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
+					if isAuthRoute {
+						break
+					}
+					continue
+				}
+				if err := json.Unmarshal(jsonBytes, &data); err != nil {
+					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
+					if isAuthRoute {
+						break
+					}
+					continue
+				}
+			} else if len(resp.JSON) > 0 {
+				if err := json.Unmarshal(resp.JSON, &data); err != nil {
+					h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
+					if isAuthRoute {
+						break
+					}
+					continue
+				}
+			}
 		}
 
 		h.sendResp(ctx, conn, req.Method, int32(codes.OK), "success", data)

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	"github.com/CBookShu/kd48/gateway/internal/ws" // 🚨 新增：引入 ws 包用于构建路由
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
@@ -81,23 +81,18 @@ func main() {
 	}
 	defer conn.Close()
 
-	userClient := userv1.NewUserServiceClient(conn)
-	slog.Info("Gateway connected to User Service cluster via Etcd")
+	ingressCli := gatewayv1.NewGatewayIngressClient(conn)
+	slog.Info("Gateway connected to User Service cluster via Etcd (GatewayIngress)")
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
 	// ==========================================
-	// 🚨 核心重构：动态路由表组装 (显式契约注入)
+	// 动态路由表：经 GatewayIngress 转发，网关不依赖业务 proto 生成 Client
 	// ==========================================
 	wsRouter := ws.NewWsRouter()
 
-	// 将 gRPC 方法包装并注册到网关路由 (一行代码接入一个接口)
-	wsRouter.Register("/user.v1.UserService/Login", ws.WrapUnary(userClient.Login))
-	wsRouter.Register("/user.v1.UserService/Register", ws.WrapUnary(userClient.Register))
-
-	// 💡 后续如果有 Room Service，只需在此追加：
-	// roomClient := roomv1.NewRoomServiceClient(roomConn)
-	// wsRouter.Register("/room.v1.RoomService/CreateRoom", ws.WrapUnary(roomClient.CreateRoom))
+	wsRouter.Register("/user.v1.UserService/Login", ws.WrapIngress(ingressCli, "/user.v1.UserService/Login"))
+	wsRouter.Register("/user.v1.UserService/Register", ws.WrapIngress(ingressCli, "/user.v1.UserService/Register"))
 
 	// 将路由表注入给网关 Handler
 	wsHandler := ws.NewHandler(tracer, wsRouter)

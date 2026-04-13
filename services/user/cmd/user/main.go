@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
@@ -69,7 +70,9 @@ func main() {
 	)
 
 	queries := sqlc.New(db)
-	userv1.RegisterUserServiceServer(s, NewUserService(queries, rdb, time.Duration(c.Session.ExpireHours)*time.Hour))
+	userSvc := NewUserService(queries, rdb, time.Duration(c.Session.ExpireHours)*time.Hour)
+	userv1.RegisterUserServiceServer(s, userSvc)
+	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc))
 
 	go func() {
 		slog.Info("User Service gRPC server listening", "port", c.UserService.Port)

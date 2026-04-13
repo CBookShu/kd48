@@ -9,5 +9,7 @@
 | 文档 | 说明 |
 |------|------|
 | [superpowers/specs/2026-04-13-kd48-roadmap.md](./superpowers/specs/2026-04-13-kd48-roadmap.md) | 产品与技术面长期路线图（大厅/游戏内、无状态与有状态服务、阶段划分等） |
+| [superpowers/specs/2026-04-13-gateway-backend-connection-design.md](./superpowers/specs/2026-04-13-gateway-backend-connection-design.md) | 网关与后端连接、Etcd 发现、稳定 Ingress 协议（JSON 载荷）与迁移建议 |
+| [superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md) | Gateway Ingress 落地实现计划（proto → user → 网关） |
 
 后续可在本表追加：部署规范、配置与染色专题、各服务边界说明等。
