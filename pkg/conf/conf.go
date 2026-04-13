@@ -24,7 +24,9 @@ type ServerConf struct {
 }
 
 type GatewayConf struct {
-	Port int `mapstructure:"port"`
+	Port                     int    `mapstructure:"port"`
+	MetaServiceTypesPrefix   string `mapstructure:"meta_service_types_prefix"`
+	MetaGatewayRoutesPrefix  string `mapstructure:"meta_gateway_routes_prefix"`
 }
 
 type UserServiceConf struct {
@@ -67,6 +69,13 @@ func Load(path string) (*Config, error) {
 	var c Config
 	if err := v.Unmarshal(&c); err != nil {
 		return nil, fmt.Errorf("unmarshal config error: %w", err)
+	}
+
+	if c.Gateway.MetaServiceTypesPrefix == "" {
+		c.Gateway.MetaServiceTypesPrefix = "kd48/meta/service-types/"
+	}
+	if c.Gateway.MetaGatewayRoutesPrefix == "" {
+		c.Gateway.MetaGatewayRoutesPrefix = "kd48/meta/gateway-routes/"
 	}
 
 	return &c, nil

@@ -1,7 +1,7 @@
 # 网关与后端连接及消息协议设计
 
 > **状态**：已评审落盘（brainstorming → 设计）。  
-> **关联**：[产品与技术面路线图](./2026-04-13-kd48-roadmap.md)（网关与业务 IDL 解耦、多服务扩展）；根目录 [`spec.md`](../../../spec.md) §3、§4。  
+> **关联**：[产品与技术面路线图](./2026-04-13-kd48-roadmap.md) §1.5（文档索引与网关专题）；根目录 [`spec.md`](../../../spec.md) §3、§4。动态配置与可靠性见 **§11、§11.12**。  
 > **日期**：2026-04-13  
 
 ---
@@ -259,10 +259,10 @@ service GatewayIngress {
 以下顺序 **须遵守**，保证「先有连接池、再有路由」，避免路由引用不存在的 `service_type`。
 
 1. **建立 Etcd 客户端**（超时、TLS、认证等与现有 `pkg/registry` 或等价配置对齐）。
-2. **全量加载服务类型**：对前缀 `kd48/meta/service-types/` 做 **Range（带 revision）**，解析每条值为 **`ServiceTypeSpec`**（protojson）。
+2. **全量加载服务类型**：对前缀 `kd48/meta/service-types/` 做 **Range（带 revision）**。**若本次 Range 未返回任何 key（物理空）**：记录 **Error** 日志（含前缀、可选 revision）并 **fail-fast（非 0 退出）**。否则解析每条值为 **`ServiceTypeSpec`**（protojson）。
 3. **校验类型（v0.1）**：对每条执行 §8.3 规则；**失败单条**：记录错误并 **跳过该 key**（或 **整体失败** 策略二选一，须在实现中固定一种并文档化；**推荐开发环境跳过、生产环境可选严格失败**）。
 4. **构建连接池**：对每个 **有效** `type_key`：`grpc.Dial(spec.discovery.grpc_etcd_target, …)`，得到 **`ClientConn`**，存入 **`pool[type_key]`**；并为每类创建 **`GatewayIngressClient`**（或等价接口）。
-5. **全量加载 WS 路由**：对前缀 `kd48/meta/gateway-routes/` Range（带 revision）。
+5. **全量加载 WS 路由**：对前缀 `kd48/meta/gateway-routes/` Range（带 revision）。**若本次 Range 未返回任何 key（物理空）**：记录 **Error** 日志并 **fail-fast（非 0 退出）**。否则继续后续步骤。
 6. **校验路由**：`schema_version`；`route_id` 与 key 后缀一致；`ws_method` **非空**；`ingress_route` **非空**；**`service_type` 必须 ∈ `pool` 且对应类型已校验为 `STATELESS_LB`**；否则跳过或严格失败（与步骤 3 策略一致）。
 7. **构建运行时路由视图**：内存结构至少包含：`ws_method` → `{ ingress_client 或 conn + WrapIngress 所需参数, ingress_route, public }`。
 8. **注入 `WsRouter` 与 Handler**：注册 **`WsHandlerFunc`**；若 Handler 仍用后缀白名单，**过渡期保留**；最终实现应改为 **按 `ws_method` 查表得 `public`**（见 **§11.9**）。
@@ -315,6 +315,7 @@ service GatewayIngress {
 | 场景 | 建议策略 |
 |------|----------|
 | **启动时 Etcd 不可达** | **默认 fail-fast**（进程退出，由编排重启）；可选 **本地快照 YAML** 仅用于 **灾备**，须在配置中 **显式开启** |
+| **启动时 meta 前缀 Range 物理无 key** | 对 `kd48/meta/service-types/` 与 `kd48/meta/gateway-routes/` 各自 Bootstrap Range：**任一侧返回的 key 列表为空** → **Error 日志 + fail-fast（非 0 退出）**；**不**采用「空进程运行、仅靠后续 Watch 灌数」。**边界**：本条 **仅** 指 Etcd **物理 key 数为 0**；若存在 key 但解析/校验后 **有效条目为 0**，仍只遵循 §11.4 步骤 3、6 的跳过/严格策略，**不**由本条单独强制退出。 |
 | **运行中 Etcd 断连** | **保留最后一致 snapshot** 继续服务；**健康检查** 置 **unready**；恢复后 **全量 resync** |
 | **部分 key 解析失败** | **指标 + 日志**；是否 **整表拒绝** 与 §11.4 步骤 3 策略一致 |
 
@@ -324,6 +325,10 @@ service GatewayIngress {
 - **日志**：每次 **全量 resync**、每次 **连接池替换**（含 `type_key`、old/new target 摘要）。
 - **追踪**：可选将 **`route_id` / `type_key`** 写入 OTel attribute（实现阶段）。
 
+### 11.12 实现与可靠性（规范）
+
+网关动态配置的实现 **须按 §11.4～§11.11 落实**，包括但不限于：**Bootstrap 顺序与 revision**、Watch 断连或 **compact revision 过期后的全量 resync**、类型与路由热更的 **幂等与并发安全**、**`ClientConn` draining**、**`ws_method` 冲突的可观测处理**、降级与健康、以及 **§11.11** 的日志与指标。若行为与本文不一致，应 **修订规格或路线图并显式记录**，**不得**以「示例 / 学习」等理由在实现中静默缺省上述关键路径。
+
 ---
 
 ## 12. 对 `spec.md` 的修订建议（合并前审阅）
@@ -332,10 +337,10 @@ service GatewayIngress {
 2. **§3.3**：补充 **Ingress + 路由表** 与 WS 信封的对应关系；鉴权白名单 **配置化** 方向。
 3. **§5.2**：增加「对外暴露给网关的 Ingress 实现」作为各服务的 **接入规范** 之一。
 4. **§3 / 注册发现**：区分 **逻辑服务类型（运维维护）** 与 **实例自注册**；补充 **有状态** 不得仅依赖无差别前缀轮询。
-5. **运维与网关**：网关对 **类型与路由** 的 **Etcd Watch 热更新** 方向（与本文 §8～§11 一致）。
+5. **运维与网关**：网关对 **类型与路由** 的 **Etcd Watch 热更新** 方向（与本文 **§8～§11** 一致；**实现与可靠性** 以 **§11.12** 为准）。
 6. **服务类型 Schema**：在 `api/proto/gateway/v1/service_type.proto` 定义 **`ServiceTypeSpec`**；Etcd 存 **protojson** 化 JSON。
 7. **WS 路由 Schema**：在 `api/proto/gateway/v1/gateway_route.proto` 定义 **`GatewayRouteSpec`**；含 **`public`** 与 **`service_type`** 引用。
-8. **网关动态配置**：Bootstrap 顺序、Watch/revision、**draining**、`public` 与 Handler 衔接、降级与健康（与本文 **§11.4～§11.11** 一致）。
+8. **网关动态配置**：Bootstrap 顺序、Watch/revision、**draining**、`public` 与 Handler 衔接、降级与健康、可靠性与可观测性（与本文 **§11.4～§11.12** 一致）。
 
 ---
 
@@ -349,3 +354,7 @@ service GatewayIngress {
 | 2026-04-13 | 服务类型：以 `service_type.proto`（`ServiceTypeSpec`）为 SSOT，Etcd 存 protojson JSON；v0.1 仅启用 `STATELESS_LB`（选项 A）。 |
 | 2026-04-13 | WS 路由：`gateway_route.proto` 中 `GatewayRouteSpec`；Etcd protojson；§4.1 与 `public`/类型引用约定。 |
 | 2026-04-13 | §11 细化：冷启动 bootstrap、revision 与全量重同步、类型/路由热更、`ClientConn` draining、`public` 与鉴权衔接、降级与健康、可观测性。 |
+| 2026-04-13 | §11.4 / §11.10：Bootstrap 时 **`service-types` 与 `gateway-routes` 各自 Range 若物理无 key 则 Error + fail-fast**；与「有 key 但校验后有效数为 0」区分。 |
+| 2026-04-13 | §11.12：**撤回**「个人学习项目可简化极端路径」的表述；改为 **实现与可靠性（规范）**，要求按 §11.4～§11.11 完整落实，禁止以示例/学习为由静默缺省关键路径。 |
+| 2026-04-13 | 文档互文：`docs/README`、路线图 §1.5、Ingress 实现计划与本设计 **§12** 对齐；文首 **关联** 指向 §11 / §11.12；Ingress 计划标明 **不含** Etcd 元数据 §11 全量实现（另立计划）。 |
+| 2026-04-13 | 实现：`gateway/internal/bootstrap`（Range、校验、`grpc.Dial` 池）、`AtomicRouter`、`Manager`（Watch `kd48/meta/` + debounce 全量重建 + 延迟 Close 旧连接）、`GatewayRouteSpec.establishes_session`；`gateway/cmd/seed-gateway-meta` 写入最小 meta；配置 `gateway.meta_*_prefix`。 |

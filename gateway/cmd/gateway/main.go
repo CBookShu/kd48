@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
-	"github.com/CBookShu/kd48/gateway/internal/ws" // 🚨 新增：引入 ws 包用于构建路由
+	"github.com/CBookShu/kd48/gateway/internal/bootstrap"
+	"github.com/CBookShu/kd48/gateway/internal/ws"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
@@ -33,12 +33,10 @@ func main() {
 		panic(err)
 	}
 
-	// 1. 初始化日志
 	logPath := filepath.Join(c.Log.FilePath, "gateway.log")
 	handler := logzap.New(c.Log.Level, logPath)
 	slog.SetDefault(slog.New(handler))
 
-	// 2. 初始化 OTel
 	shutdown, err := otelkit.InitTracer(c.Server.Name + "-gateway")
 	if err != nil {
 		slog.Error("Init otel failed", "error", err)
@@ -62,51 +60,39 @@ func main() {
 	}
 	defer etcdCli.Close()
 
-	// 3. gRPC 连接池
 	etcdResolverBuilder, err := resolver.NewBuilder(etcdCli)
 	if err != nil {
 		panic(err)
 	}
 	grpcresolver.Register(etcdResolverBuilder)
 
-	conn, err := grpc.Dial(
-		"etcd:///kd48/user-service",
+	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	)
-	if err != nil {
-		slog.Error("gRPC dial failed", "error", err)
-		panic(err)
 	}
-	defer conn.Close()
 
-	ingressCli := gatewayv1.NewGatewayIngressClient(conn)
-	slog.Info("Gateway connected to User Service cluster via Etcd (GatewayIngress)")
+	atomicRT := ws.NewAtomicRouter()
+	mgr := bootstrap.NewManager(etcdCli, atomicRT, c.Gateway.MetaServiceTypesPrefix, c.Gateway.MetaGatewayRoutesPrefix, dialOpts)
+	if err := mgr.Bootstrap(context.Background()); err != nil {
+		slog.Error("gateway meta bootstrap failed", "error", err)
+		os.Exit(1)
+	}
+
+	metaCtx, metaCancel := context.WithCancel(context.Background())
+	defer metaCancel()
+	go mgr.Run(metaCtx)
+	defer mgr.Close()
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
-	// ==========================================
-	// 动态路由表：经 GatewayIngress 转发，网关不依赖业务 proto 生成 Client
-	// ==========================================
-	wsRouter := ws.NewWsRouter()
+	wsHandler := ws.NewHandler(tracer, atomicRT)
 
-	wsRouter.Register("/user.v1.UserService/Login", ws.WrapIngress(ingressCli, "/user.v1.UserService/Login"))
-	wsRouter.Register("/user.v1.UserService/Register", ws.WrapIngress(ingressCli, "/user.v1.UserService/Register"))
-
-	// 将路由表注入给网关 Handler
-	wsHandler := ws.NewHandler(tracer, wsRouter)
-	// ==========================================
-
-	// 4. 初始化 Fiber App
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
 
-	// 5. 挂载路由 (不再需要把具体的 userClient 传给路由层)
 	SetupRoutes(app, wsHandler)
 
-	// 6. 启动服务
 	go func() {
 		slog.Info("Gateway Fiber WS server listening", "port", c.Gateway.Port)
 		if err := app.Listen(fmt.Sprintf(":%d", c.Gateway.Port)); err != nil {
@@ -114,13 +100,13 @@ func main() {
 		}
 	}()
 
-	// 阻塞等待退出信号
 	slog.Info("Server is running, press Ctrl+C to stop...")
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	slog.Info("Shutting down server...")
+	metaCancel()
 	if err := app.ShutdownWithTimeout(5 * time.Second); err != nil {
 		slog.Error("Fiber shutdown error", "error", err)
 	}

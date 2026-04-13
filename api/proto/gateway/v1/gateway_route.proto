@@ -22,4 +22,6 @@ message GatewayRouteSpec {
   bool public = 6;
   // 可选，便于运维展示
   string display_name = 7;
+  // 成功响应后网关将连接标为已认证（如 Login / Register）
+  bool establishes_session = 8;
 }

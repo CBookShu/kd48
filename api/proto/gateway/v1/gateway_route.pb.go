@@ -35,9 +35,11 @@ type GatewayRouteSpec struct {
 	// true：免鉴权；false：须已认证（替代 handler 内后缀硬编码）
 	Public bool `protobuf:"varint,6,opt,name=public,proto3" json:"public,omitempty"`
 	// 可选，便于运维展示
-	DisplayName   string `protobuf:"bytes,7,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisplayName string `protobuf:"bytes,7,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// 成功响应后网关将连接标为已认证（如 Login / Register）
+	EstablishesSession bool `protobuf:"varint,8,opt,name=establishes_session,json=establishesSession,proto3" json:"establishes_session,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GatewayRouteSpec) Reset() {
@@ -119,12 +121,19 @@ func (x *GatewayRouteSpec) GetDisplayName() string {
 	return ""
 }
 
+func (x *GatewayRouteSpec) GetEstablishesSession() bool {
+	if x != nil {
+		return x.EstablishesSession
+	}
+	return false
+}
+
 var File_gateway_v1_gateway_route_proto protoreflect.FileDescriptor
 
 const file_gateway_v1_gateway_route_proto_rawDesc = "" +
 	"\n" +
 	"\x1egateway/v1/gateway_route.proto\x12\n" +
-	"gateway.v1\"\xf4\x01\n" +
+	"gateway.v1\"\xa5\x02\n" +
 	"\x10GatewayRouteSpec\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\x05R\rschemaVersion\x12\x19\n" +
 	"\broute_id\x18\x02 \x01(\tR\arouteId\x12\x1b\n" +
@@ -132,7 +141,8 @@ const file_gateway_v1_gateway_route_proto_rawDesc = "" +
 	"\fservice_type\x18\x04 \x01(\tR\vserviceType\x12#\n" +
 	"\ringress_route\x18\x05 \x01(\tR\fingressRoute\x12\x16\n" +
 	"\x06public\x18\x06 \x01(\bR\x06public\x12!\n" +
-	"\fdisplay_name\x18\a \x01(\tR\vdisplayNameB9Z7github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1b\x06proto3"
+	"\fdisplay_name\x18\a \x01(\tR\vdisplayName\x12/\n" +
+	"\x13establishes_session\x18\b \x01(\bR\x12establishesSessionB9Z7github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1b\x06proto3"
 
 var (
 	file_gateway_v1_gateway_route_proto_rawDescOnce sync.Once

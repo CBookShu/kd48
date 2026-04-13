@@ -4,6 +4,14 @@
 
 **Goal:** 落地 [网关与后端连接设计](../specs/2026-04-13-gateway-backend-connection-design.md)：新增稳定 `GatewayIngress` gRPC、User 服务内部分发、网关通过 Ingress + 路由表转发 WS 请求，**移除网关对 `user/v1` 生成客户端的依赖**（网关 `go.mod` 仍依赖 `api/proto`，但仅使用 `gateway/v1`）。
 
+**Scope 边界**：本计划覆盖 **M0 Ingress**；**Etcd 元数据驱动路由** 见 [gateway-etcd-meta 实现计划](./2026-04-13-gateway-etcd-meta-implementation-plan.md)（与设计 **§11、§11.12** 对齐）。
+
+## 批准记录（人类门闩）
+
+- **状态**：已落地（追溯：若当时未按 `AGENTS.md` 执行，后续修订须补 **批准 + TDD + subagent**）
+- **批准范围**：（可选手填）
+- **TDD / Subagent**：（新任务强制，见根目录 `AGENTS.md`）
+
 **Architecture:** 客户端 WS 信封不变；网关将 `(method, payload)` 映射为 `IngressRequest{ route, json_payload }`，经 **同一 `grpc.ClientConn`** 调用 `GatewayIngress/Call`；User 服务在 `Call` 内按 `route` 做 **protojson** 解包并转调现有 `Login`/`Register`。为把 **Ingress 返回的 JSON bytes** 填入现有 WS `Data` 字段，将 `WsHandlerFunc` 扩展为返回 **`WsHandlerResult`（含 `proto.Message` 或原始 JSON bytes）**。
 
 **Tech Stack:** Go 1.26、`protoc` + `protoc-gen-go` + `protoc-gen-go-grpc`（与现有 `gen_proto.sh` 一致）、gRPC、`google.golang.org/protobuf/encoding/protojson`、现有 Etcd resolver。
@@ -405,10 +413,10 @@ git commit -m "feat(gateway): route WS to user via GatewayIngress; drop user v1 
 ### Task 5: 文档与 Spec 对齐（可选但建议）
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-04-13-gateway-backend-connection-design.md`（§9 变更记录）
+- Modify: `docs/superpowers/specs/2026-04-13-gateway-backend-connection-design.md`（**§13** 变更记录）
 - Modify: `spec.md`（按需合并设计 §8 建议）
 
-- [ ] **Step 1: 在设计文档变更记录增加一行「已实现 M0 Ingress + User」**
+- [ ] **Step 1: 在设计文档 §13 变更记录增加一行「已实现 M0 Ingress + User」**
 
 - [ ] **Step 2: 若合并根 spec**：在 §4.1 / §3.3 增加 1～2 句指向 `gateway.v1` 与路由表（具体内容与设计 §8 一致）。
 
