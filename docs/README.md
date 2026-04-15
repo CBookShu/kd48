@@ -12,6 +12,7 @@
 |------|------|
 | [superpowers/specs/2026-04-13-kd48-roadmap.md](./superpowers/specs/2026-04-13-kd48-roadmap.md) | 产品与技术面长期路线图（大厅/游戏内、无状态与有状态服务、阶段划分等） |
 | [superpowers/specs/2026-04-13-gateway-backend-connection-design.md](./superpowers/specs/2026-04-13-gateway-backend-connection-design.md) | 网关与后端连接、稳定 **Ingress**（JSON 载荷）、Etcd **实例发现**与 **逻辑元数据**（服务类型 / WS 路由，protojson）；**§11** Bootstrap + Watch、降级与健康；**§11.12** 实现与可靠性（须完整落实，禁止静默缺省关键路径） |
+| [superpowers/specs/2026-04-15-lobby-service-design.md](./superpowers/specs/2026-04-15-lobby-service-design.md) | **Lobby** 服务：活动域 gRPC 承接、无状态水平扩展；与 **Gateway** 职责划分；**CSV→JSON→MySQL** 权威存储 + **Redis 变更通知**（禁止以轮询 MySQL 作变更主路径）；打表生成 **Go 强类型** 与运行时加载 |
 | [superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md) | Gateway Ingress **M0 落地**（proto → User 分发 → 网关 `WrapIngress`） |
 | [superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md) | 网关 **Etcd 元数据**（类型 + 路由 protojson）、Bootstrap、**Watch**、`AtomicRouter`、**seed-gateway-meta**（与设计 **§11、§11.12** 对齐） |
 
