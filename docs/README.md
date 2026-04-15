@@ -15,5 +15,6 @@
 | [superpowers/specs/2026-04-15-lobby-service-design.md](./superpowers/specs/2026-04-15-lobby-service-design.md) | **Lobby** 服务：活动域 gRPC 承接、无状态水平扩展；与 **Gateway** 职责划分；**CSV→JSON→MySQL** 权威存储 + **Redis 变更通知**（禁止以轮询 MySQL 作变更主路径）；打表生成 **Go 强类型** 与运行时加载 |
 | [superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md) | Gateway Ingress **M0 落地**（proto → User 分发 → 网关 `WrapIngress`） |
 | [superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md) | 网关 **Etcd 元数据**（类型 + 路由 protojson）、Bootstrap、**Watch**、`AtomicRouter`、**seed-gateway-meta**（与设计 **§11、§11.12** 对齐） |
+| [superpowers/plans/2026-04-15-lobby-service-implementation-plan.md](./superpowers/plans/2026-04-15-lobby-service-implementation-plan.md) | **Lobby** 实现计划：proto 骨架、迁移、配置 bootstrap + **Redis 通知**、**GatewayIngress**、网关种子；打表/代码生成列为可选 Task 7 |
 
 后续可在本表追加：部署规范、配置与染色专题、各服务边界说明等。
