@@ -53,6 +53,7 @@
 
 - CSV 为 **有规则表**：含 **字段类型、字段名、中文注释** 等元信息约定（可由表头行、独立 schema 文件或工具约定表达，实现阶段细化）。
 - 打表工具对 CSV 做 **类型与业务校验**，通过后生成 **JSON**。
+- **可执行格式（M0）**：`##SCHEMA` / `##DATA` 分段、UTF-8、RFC 4180、`json_payload` 根字段、`lobby_config_revision` 表、Redis 频道与通知 JSON 等，已写入 [Lobby 实现计划 §配置与消息格式规范](../plans/2026-04-15-lobby-service-implementation-plan.md#配置与消息格式规范m0-可执行约定)；本设计规格不重複展开，以免双源漂移。
 
 ### 4.2 MySQL 持久化（权威）
 
