@@ -93,7 +93,111 @@
 
 ---
 
-## 6. 风险与待实现阶段确认项
+## 6. 数据结构与接口草图（评审用）
+
+> 下列为 **M0 拟议形状**：用于判断 **配置 JSON 是否合理**、**gRPC 是否好接网关**、**Lobby 内部边界是否清晰**；实现时可微调命名，但 **语义** 不宜无协商漂移。细则仍以 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) 为准。
+
+### 6.1 配置 JSON（`sheet_v1` 载荷）
+
+**根对象（存入 MySQL `json_payload`）**
+
+| 字段 | JSON 类型 | 说明 |
+|------|-----------|------|
+| `config_format_version` | string | 固定 `"sheet_v1"` |
+| `config_id` | string | 逻辑配置 id，与 DB 行一致 |
+| `revision` | number | 与 DB 行一致 |
+| `data` | **array of object** | 每个元素对应 CSV 一条数据行；对象 **键 = CSV 第 2 行变量名** |
+
+**`data[]` 中一条记录（与根目录 `exp.csv` 列对齐的示例形状）**
+
+| 键 | JSON 类型 | 来源列 / 类型行 |
+|----|------------|-----------------|
+| `note` | string | `string` |
+| `amount` | number | `int32` |
+| `tags` | array of string | `string[]` |
+| `extra_map` | object（键为 string） | `int32 = string`；Go 侧可映射为 `map[int32]string` |
+
+### 6.2 Go 侧拟议类型（示意，非已生成代码）
+
+```go
+// 信封：Lobby 进程内只读快照的顶层反序列化目标。
+type LobbyConfigEnvelope struct {
+	ConfigFormatVersion string           `json:"config_format_version"`
+	ConfigID            string           `json:"config_id"`
+	Revision            int64            `json:"revision"`
+	Data                []LobbySheetRow  `json:"data"` // 或 json.RawMessage + 二次解析，见实现计划
+}
+
+// 与当前示例 CSV 列一一对应；Task 7 可由打表工具改为生成此 struct。
+type LobbySheetRow struct {
+	Note      string            `json:"note"`
+	Amount    int32             `json:"amount"`
+	Tags      []string          `json:"tags"`
+	ExtraMap  map[string]string `json:"extra_map"` // 或 map[int32]string + 自定义 UnmarshalJSON
+}
+```
+
+**易用性说明**：业务 RPC 只读 **`LobbyConfigEnvelope` 指针 / 拷贝快照** 即可，**不** 再碰 `[]byte`；新增列 = 改 CSV + 再生 struct + 发版（与 §4.5 一致）。
+
+### 6.3 对外 gRPC（`lobby.v1`，经网关 Ingress）
+
+与 User 相同模式：**网关只调稳定 `gateway.v1.GatewayIngress/Call`**，`route` 指向 Lobby 的 **全方法名**；载荷为 **protojson** 与请求/响应 message 对应。
+
+**M0 拟议服务（节选）**
+
+```protobuf
+service LobbyService {
+  rpc Ping(PingRequest) returns (PingReply);
+  // 后续：任务 / 签到 / 排行等在同一 service 上增量添加 RPC
+}
+message PingRequest { optional string client_hint = 1; }
+message PingReply {
+  string pong = 1;
+  int64 config_revision = 2; // 可选：带回当前已加载 revision，便于客户端判断
+}
+```
+
+**拟议 Ingress 路由表（WS `method` → 与网关 meta 对齐）**
+
+| `IngressRequest.route` | 含义 |
+|------------------------|------|
+| `/lobby.v1.LobbyService/Ping` | 健康 / 联调 / 带回配置版本探测 |
+
+**Metadata（网关 → Lobby，拟议）**
+
+| Key | 说明 |
+|-----|------|
+| `x-user-id`（或仓库统一常量名） | 玩家 id；Lobby **授权**依赖它 |
+
+（具体 key 名实现时与网关 `WrapIngress` 填入的 metadata 对齐，写进 proto 注释或 `pkg/` 常量。）
+
+### 6.4 Lobby 内部接口边界（拟议，非对外 gRPC）
+
+用于拆分 **配置加载** 与 **业务 RPC**，便于单测与替换实现：
+
+```go
+// 从 MySQL 拉取并解析为信封；由 bootstrap / Redis 通知触发。
+type ConfigLoader interface {
+	LoadLatest(ctx context.Context, configID string) (*LobbyConfigEnvelope, error)
+	LoadRevision(ctx context.Context, configID string, revision int64) (*LobbyConfigEnvelope, error)
+}
+
+// 订阅 Redis；收到消息后调用 Loader 再原子替换快照。
+type ConfigNotifier interface {
+	Run(ctx context.Context, onReload func(ctx context.Context) error) error
+}
+
+// 业务层只读；gRPC handler 注入。
+type ConfigSnapshot interface {
+	Current() *LobbyConfigEnvelope // 或 (T, ok)，无配置时行为在实现计划 Task 4 约定
+}
+```
+
+**易用性**：业务 handler **只依赖 `ConfigSnapshot`**，不依赖 Redis/MySQL 细节；**配置变更** 与 **活动逻辑** 解耦。
+
+---
+
+## 7. 风险与待实现阶段确认项
 
 | 项 | 说明 |
 |----|------|
@@ -103,13 +207,13 @@
 
 ---
 
-## 7. 文档自检（落盘时）
+## 8. 文档自检（落盘时）
 
 - 已消除与「Excel 为唯一载体」「Lobby 轮询 MySQL 发现变更」的冲突表述。  
 - 「活动内容不定型」与「配置 CSV/JSON 管线」并存：**前者指活动运行时数据模型**，**后者指策划表驱动配置**。  
 
 ---
 
-## 8. 后续步骤（流程门闩）
+## 9. 后续步骤（流程门闩）
 
 实现前须按 [`AGENTS.md`](../../../AGENTS.md) 另立 **`docs/superpowers/plans/YYYY-MM-DD-<feature>.md`** 并获 **计划批准**；开发遵循 **TDD** 与 **verification-before-completion**。
