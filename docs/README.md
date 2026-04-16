@@ -18,5 +18,6 @@
 | [superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md) | Gateway Ingress **M0 落地**（proto → User 分发 → 网关 `WrapIngress`） |
 | [superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md) | 网关 **Etcd 元数据**（类型 + 路由 protojson）、Bootstrap、**Watch**、`AtomicRouter`、**seed-gateway-meta**（与设计 **§11、§11.12** 对齐） |
 | [superpowers/plans/2026-04-15-lobby-service-implementation-plan.md](./superpowers/plans/2026-04-15-lobby-service-implementation-plan.md) | **Lobby** 实现计划：**CSV/`json_payload`/打表** 见 [专项规格](./superpowers/specs/2026-04-16-lobby-config-csv-and-tooling-spec.md)；MySQL **`scope`/`title`/`tags`/`start_time`/`end_time`**（**§C**）；**§C.1 `config_id` 命名**；proto、迁移、bootstrap、**Redis**、Ingress、Task 7 |
+| [superpowers/plans/2026-04-18-datasource-routing-implementation-plan.md](./superpowers/plans/2026-04-18-datasource-routing-implementation-plan.md) | **`routing_key` + LPM** 路由：`pkg/dsroute`、启动校验、User 接入；依据 [数据源路由规格](./superpowers/specs/2026-04-17-datasource-routing-and-pools.md) **§11** |
 
 后续可在本表追加：部署规范、配置与染色专题、各服务边界说明等。
