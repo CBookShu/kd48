@@ -15,6 +15,6 @@
 | [superpowers/specs/2026-04-15-lobby-service-design.md](./superpowers/specs/2026-04-15-lobby-service-design.md) | **Lobby** 服务：活动域 gRPC、无状态扩展、与 **Gateway** 分工；**三行头 CSV**（文档内可称 sheet_v1，**不**写入 `json_payload`）；**§6** 配置 JSON / Go 示意、`lobby.v1` 与 **Ingress**、**ConfigLoader/Snapshot** 草图 |
 | [superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-ingress-implementation-plan.md) | Gateway Ingress **M0 落地**（proto → User 分发 → 网关 `WrapIngress`） |
 | [superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md](./superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md) | 网关 **Etcd 元数据**（类型 + 路由 protojson）、Bootstrap、**Watch**、`AtomicRouter`、**seed-gateway-meta**（与设计 **§11、§11.12** 对齐） |
-| [superpowers/plans/2026-04-15-lobby-service-implementation-plan.md](./superpowers/plans/2026-04-15-lobby-service-implementation-plan.md) | **Lobby** 实现计划：**三行头 CSV**（含 **`time`** 标量类型）；MySQL **`scope`/`title`/`tags`/`start_time`/`end_time`**；**§C.1 `config_id` 命名**；proto、迁移、bootstrap、**Redis**、Ingress、Task 7 |
+| [superpowers/plans/2026-04-15-lobby-service-implementation-plan.md](./superpowers/plans/2026-04-15-lobby-service-implementation-plan.md) | **Lobby** 实现计划：**三行头 CSV**（`time`：**`YYYY-MM-DD HH:MM:SS`** 无时区）；MySQL **`scope`/`title`/`tags`/`start_time`/`end_time`**；**§C.1 `config_id` 命名**；proto、迁移、bootstrap、**Redis**、Ingress、Task 7 |
 
 后续可在本表追加：部署规范、配置与染色专题、各服务边界说明等。

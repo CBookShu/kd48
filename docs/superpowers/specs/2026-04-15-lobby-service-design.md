@@ -53,7 +53,7 @@
 
 - CSV 为 **有规则表**：含 **字段类型、字段名、中文注释** 等元信息约定（可由表头行、独立 schema 文件或工具约定表达，实现阶段细化）。
 - 打表工具对 CSV 做 **类型与业务校验**，通过后生成 **JSON**。
-- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string,time`**（`time` 为 RFC3339 → JSON string）、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map**；**`json_payload` 不含 `config_format_version`**；载荷根对象见实现计划 **§B**；MySQL 表、Redis 通知等同上引用。
+- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string,time`**（`time` 为 **`YYYY-MM-DD HH:MM:SS`** 无时区字符串 → JSON string）、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map**；**`json_payload` 不含 `config_format_version`**；载荷根对象见实现计划 **§B**；MySQL 表、Redis 通知等同上引用。
 
 ### 4.2 MySQL 持久化（权威）
 

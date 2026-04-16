@@ -65,9 +65,11 @@
 | `int32` | JSON number（十进制，范围 int32） |
 | `int64` | JSON number（十进制，范围 int64） |
 | `string` | JSON string（建议 **trim 首尾空白** 后写入 JSON） |
-| `time` | JSON **string**，值为 **RFC3339** 时刻（如 `2026-04-15T10:30:00+08:00`）；打表/Lobby 解析为 `time.Time`（或等价）；**非法格式报错**。 |
+| `time` | JSON **string**，与单元格 **同形**：**`YYYY-MM-DD HH:MM:SS`**（日期与时间之间 **一个空格**；24 小时制；**不含时区**）。打表/Lobby 按 **部署约定单一时区**（如 Lobby 配置中的 `time_location`，默认可与 DB `session` 时区一致）解析为 `time.Time` / 写入 `DATETIME`；**与正则不符则报错**。 |
 
 **可选**：`time?` — 空单元格则该行 JSON **省略该键**。
+
+**无时区说明**：单元格 **不写** `Z` / `±HH:MM`；跨环境以 **「库 + 应用同一约定时区」** 为准，不在本条 JSON 里表达偏移。
 
 **2）标量数组 `T[]`**（`T` ∈ `int32` / `int64` / `string`；**M0 不含 `time[]`**，需要时后续扩展。）
 
