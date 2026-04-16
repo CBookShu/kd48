@@ -57,14 +57,15 @@
 
 ### 4.2 MySQL 持久化（权威）
 
-建议至少包含以下 **概念字段**（具体表名与范式在实现/迁移中确定）：
+除 **CSV 原文、JSON 载荷、`config_id` + `revision`** 外，建议在 **同一 revision 行** 上增加 **可索引的筛选与审计列**（`env`、`scope`、`status`、`title`、`tags` JSON、生效时间窗、`content_sha256`、`created_by`、`comment` 等），避免「只能靠扫 `json_payload`」才能筛配置。详见 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) **§C「MySQL 表结构」**。
 
 | 概念 | 含义 |
 |------|------|
 | CSV 原文 | 产品侧产出的源文本，便于审计与 diff。 |
 | JSON 载荷 | 校验通过后写入，供 Lobby `json.Unmarshal` 至 **生成的 Go 类型**。 |
 | 版本 / revision | 单调递增或等价机制，用于并发更新与对账。 |
-| `updated_at`、环境、配置 id 等 | 运维与多环境隔离。 |
+| **筛选维度** | `env`、`scope`、`status`、`title`、`tags`、生效窗等，支撑运营列表与 Lobby **按条件取当前行**。 |
+| 审计 | `created_at`、`created_by`、`comment`、`content_sha256` 等。 |
 
 ### 4.3 Redis：仅用于「有变更」通知
 

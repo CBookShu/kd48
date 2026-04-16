@@ -162,26 +162,45 @@ string,int32,string[],int32 = string
 
 ### C. MySQL 表结构（建议名与列，迁移时可微调但须同步本文档）
 
-**表名（建议）**：`lobby_config_revision`
+**表名（建议）**：`lobby_config_revision`（**一行 = 一次发布/一次 revision**；正文仍在 `csv_text` / `json_payload`，下列列为 **筛选、审计、生效范围** 服务。）
 
 | 列名 | 类型 | 说明 |
 |------|------|------|
 | `id` | `BIGINT` PK AUTO_INCREMENT | 代理键 |
-| `config_id` | `VARCHAR(64)` NOT NULL | 逻辑配置 id，如 `global`、活动包 id |
-| `revision` | `BIGINT` NOT NULL | 单调递增（**每个 `config_id` 内**单调，由打表工具保证） |
+| `config_id` | `VARCHAR(64)` NOT NULL | 逻辑配置 id（稳定键；同 id 多 revision） |
+| `revision` | `BIGINT` NOT NULL | 在 **`config_id` 内** 单调递增（打表工具保证） |
+| **`env`** | `VARCHAR(16)` NOT NULL DEFAULT `'prod'` | **运行环境**：`dev` / `staging` / `prod` 等，便于 **按环境筛配置** |
+| **`scope`** | `VARCHAR(64)` NOT NULL DEFAULT `'default'` | **业务域/用途**：如 `reward`、`checkin`、`season_pass`；运营/工具 `WHERE scope = ?` |
+| **`status`** | `VARCHAR(16)` NOT NULL DEFAULT `'published'` | **生命周期**：建议枚举 `draft` / `published` / `archived`；**Lobby 默认只加载 `published`**（实现可配置） |
+| **`title`** | `VARCHAR(256)` NULL | **人读标题**（策划表名、活动名摘要），支持后台列表与 **LIKE / 全文**（若后续加 FULLTEXT） |
+| **`tags`** | `JSON` NULL | **标签数组**（`["pvp","s1"]`），便于 `JSON_CONTAINS(tags, '"pvp"', '$')` 等筛选；无标签存 `NULL` 或 `[]` |
+| **`effective_from`** | `DATETIME(3)` NULL | **生效起始**（含）；`NULL` 表示不限制 |
+| **`effective_until`** | `DATETIME(3)` NULL | **生效结束**（不含或含，实现时钉死一种）；`NULL` 表示不限制 |
+| **`content_sha256`** | `CHAR(64)` NULL | **正文指纹**（对 canonical `json_payload` 或 CSV+JSON 拼接计算），去重、对账、与 Redis 通知可选携带 |
 | `csv_text` | `MEDIUMTEXT` NOT NULL | 策划 CSV 原文 |
 | `json_payload` | `JSON` NOT NULL | MySQL 8 JSON；若环境限制可改为 `LONGTEXT` + 应用层校验 |
-| `created_at` | `DATETIME(3)` 或 `TIMESTAMP(3)` | 写入时间，默认 `CURRENT_TIMESTAMP(3)` |
+| **`created_by`** | `VARCHAR(128)` NULL | 发布人/流水线 id（审计） |
+| **`comment`** | `VARCHAR(512)` NULL | **发布说明**（版本说明，非 CSV 内注释） |
+| `created_at` | `DATETIME(3)` NOT NULL DEFAULT CURRENT_TIMESTAMP(3) | 插入时间 |
+| **`updated_at`** | `DATETIME(3)` NULL | 若行会 **原地修正**（一般不建议改已发布行）可用；否则可与 `created_at` 相同逻辑 |
 
-**约束与索引**
+**约束与索引（筛选向）**
 
 - `UNIQUE KEY uk_config_revision (`config_id`, `revision`)`  
-- `KEY idx_config_latest (`config_id`, `revision` DESC)` — 便于 `SELECT … ORDER BY revision DESC LIMIT 1`
+- `KEY idx_config_latest (`config_id`, `revision` DESC)` — Lobby 拉「当前」：`WHERE config_id=? AND env=? AND status='published' ORDER BY revision DESC LIMIT 1`  
+- **`KEY idx_env_scope_status_rev (`env`, `scope`, `status`, `revision` DESC)`** — 列表/运营：按环境 + 域 + 状态扫 revision  
+- **`KEY idx_effective (`env`, `status`, `effective_from`, `effective_until`)`** — 按时间窗筛「当前应生效」的配置（具体谓词在实现/运营脚本中写清）  
+- （可选）**`tags` 上生成列 + 索引**：若 `JSON_CONTAINS` 性能不足，可将首标签拆 `tag_primary VARCHAR(64) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(tags,'$[0]'))) STORED` 再索引（实现阶段按需）
 
 **查询约定（Lobby bootstrap / 通知后拉取）**
 
-- **当前生效**：`WHERE config_id = ? ORDER BY revision DESC LIMIT 1`。  
-- **按通知精确拉**：`WHERE config_id = ? AND revision = ?`（通知必带 `revision`，避免读到中间态）。
+- **当前生效（默认）**：`WHERE config_id = ? AND env = ? AND status = 'published' [AND 当前时刻落在 effective 窗内] ORDER BY revision DESC LIMIT 1`。  
+- **按通知精确拉**：`WHERE config_id = ? AND revision = ?`（通知必带二者；**可选**再校验 `env` 与 Lobby 配置一致）。  
+- **运营/工具筛列表**：主要走 **`env`、`scope`、`status`、`title`（LIKE）、`tags`（JSON_CONTAINS）**；**勿** 依赖对大 `json_payload` 的全表模糊匹配作为主路径（慢且难维护）。
+
+**与「字段过多」的平衡**
+
+- 若后续 **维度爆炸**（多租户、多地区），可演进为 **`lobby_config` 主表（维度列） + `lobby_config_revision` 仅存 revision 与正文**；M0 单宽表即可支撑 **常见筛选**，避免一上来拆两表拖慢交付。
 
 ---
 
