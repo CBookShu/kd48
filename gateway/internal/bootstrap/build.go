@@ -9,7 +9,7 @@ import (
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	"github.com/CBookShu/kd48/gateway/internal/ws"
 
-	clientv3 	"go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
