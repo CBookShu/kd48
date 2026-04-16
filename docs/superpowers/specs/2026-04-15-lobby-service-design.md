@@ -53,18 +53,18 @@
 
 - CSV 为 **有规则表**：含 **字段类型、字段名、中文注释** 等元信息约定（可由表头行、独立 schema 文件或工具约定表达，实现阶段细化）。
 - 打表工具对 CSV 做 **类型与业务校验**，通过后生成 **JSON**。
-- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string`**、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map（单元格 `键 = 值` 多条用 `|`）**；**`json_payload` 不含 `config_format_version`**（解析规则为 **全局一套**，由打表工具与 Lobby **同版本**保证）；载荷根对象为 **`config_id`、`revision`、`data`（对象数组）** 等，见实现计划 **§B**；MySQL 表、Redis 通知等同上引用。
+- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string,time`**（`time` 为 RFC3339 → JSON string）、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map**；**`json_payload` 不含 `config_format_version`**；载荷根对象见实现计划 **§B**；MySQL 表、Redis 通知等同上引用。
 
 ### 4.2 MySQL 持久化（权威）
 
-除 **`config_id`、`revision`、正文（`csv_text` / `json_payload`）、`created_at`** 外，增加 **`scope`（业务域筛选）、`title`（列表/搜索）、`tags`（JSON 标签）、`effective_from` / `effective_until`（生效窗）**。**不** 用表内 `env`（**不同环境用不同库**）；**不** 用 `status`（**不做草稿/发布状态机**，Lobby 不兼管配置状态）。**`config_id` 命名** 建议 **只** 体现 **`{scope}_{稳定slug}`**，**不把时间写进 id**（生效只用 **`effective_*` + `revision`**），细则见 [实现计划 §C.1](../plans/2026-04-15-lobby-service-implementation-plan.md)。
+除 **`config_id`、`revision`、正文（`csv_text` / `json_payload`）、`created_at`** 外，增加 **`scope`、`title`、`tags`、`start_time` / `end_time`（生效窗，语义 startTime/endTime）**。**不** 用表内 `env`；**不** 用 `status`。**`config_id` 命名** 见 [实现计划 §C.1](../plans/2026-04-15-lobby-service-implementation-plan.md)（**不把时间写进 id**；生效靠 **`start_time`/`end_time` + `revision`**）。
 
 | 概念 | 含义 |
 |------|------|
 | CSV 原文 | 产品侧产出的源文本，便于审计与 diff。 |
 | JSON 载荷 | 校验通过后写入，供 Lobby `json.Unmarshal` 至 **生成的 Go 类型**。 |
 | 版本 / revision | 单调递增或等价机制，用于并发更新与对账。 |
-| **scope / title / tags / 生效窗** | **筛选与运营列表**；**生效时间只以列为准**，`config_id` 保持稳定。 |
+| **scope / title / tags / start_time / end_time** | **筛选与运营列表**；**生效时间只以这两列为准**，`config_id` 保持稳定。 |
 
 ### 4.3 Redis：仅用于「有变更」通知
 

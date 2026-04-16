@@ -65,8 +65,11 @@
 | `int32` | JSON number（十进制，范围 int32） |
 | `int64` | JSON number（十进制，范围 int64） |
 | `string` | JSON string（建议 **trim 首尾空白** 后写入 JSON） |
+| `time` | JSON **string**，值为 **RFC3339** 时刻（如 `2026-04-15T10:30:00+08:00`）；打表/Lobby 解析为 `time.Time`（或等价）；**非法格式报错**。 |
 
-**2）标量数组 `T[]`**（`T` ∈ `int32` / `int64` / `string`）
+**可选**：`time?` — 空单元格则该行 JSON **省略该键**。
+
+**2）标量数组 `T[]`**（`T` ∈ `int32` / `int64` / `string`；**M0 不含 `time[]`**，需要时后续扩展。）
 
 - 单元格内 **多个元素用 `|` 分隔**；`|` 两侧可有空白，解析时 trim。  
 - **`int32[]` / `int64[]`**：分段后每段 trim；**不得出现空段**（如 `1||2` 非法）；每段解析为整数。  
@@ -177,8 +180,8 @@ string,int32,string[],int32 = string
 | **`scope`** | `VARCHAR(64)` NOT NULL | **业务域**，用于筛选（如 `checkin`、`reward`、`rank`、`task`）；与 `config_id` 前缀 **应对齐**（见 §C.1），打表工具可做校验。 |
 | **`title`** | `VARCHAR(256)` NULL | **列表/搜索用短标题**（人读），可与 CSV 内某展示名一致或独立维护。 |
 | **`tags`** | `JSON` NULL | **标签 JSON 数组**（如 `["s3","pvp"]`），供 `JSON_CONTAINS` 或应用层筛选；无则 `NULL`。 |
-| **`effective_from`** | `DATETIME(3)` NULL | **生效起始**（含）；`NULL` = 不限制。 |
-| **`effective_until`** | `DATETIME(3)` NULL | **生效结束**（建议语义为 **不含** 该时刻，或实现时钉死「含/不含」并写测试）；`NULL` = 不限制。 |
+| **`start_time`** | `DATETIME(3)` NULL | **生效起始**（口语 **startTime**）；`NULL` = 不限制。 |
+| **`end_time`** | `DATETIME(3)` NULL | **生效结束**（口语 **endTime**）；语义钉死为 **`[start_time, end_time)` 左闭右开**（`end_time` 该时刻 **已失效**）；任一为 `NULL` 则该侧不限制；实现须写单测。 |
 | `csv_text` | `MEDIUMTEXT` NOT NULL | 策划 CSV 原文（审计）。 |
 | `json_payload` | `JSON` NOT NULL | 打表生成的 JSON（Lobby 主读）。 |
 | `created_at` | `DATETIME(3)` NOT NULL DEFAULT CURRENT_TIMESTAMP(3) | 插入时间。 |
@@ -188,20 +191,20 @@ string,int32,string[],int32 = string
 - `UNIQUE KEY uk_config_revision (`config_id`, `revision`)`  
 - `KEY idx_config_latest (`config_id`, `revision` DESC)` — 取某配置最新版。  
 - **`KEY idx_scope_config_rev (`scope`, `config_id`, `revision` DESC)`** — 按业务域 **枚举配置**、再取最新 revision。  
-- **`KEY idx_scope_effective (`scope`, `effective_from`, `effective_until`)`** — 按域 + **时间窗** 筛「某时刻应考虑的配置行」（具体谓词由运营/Lobby 查询约定）。  
+- **`KEY idx_scope_time (`scope`, `start_time`, `end_time`)`** — 按域 + **时间窗** 筛配置行。  
 - （可选）在 `title` 上建 **FULLTEXT** — 仅当确实需要中文分词/全文再引入，M0 可只用 `LIKE` + `title` 非空约束。
 
 **查询约定（Lobby bootstrap / 通知后拉取）**
 
 - **按 id 取最新**：`WHERE config_id = ? ORDER BY revision DESC LIMIT 1`。  
 - **按通知精确拉**：`WHERE config_id = ? AND revision = ?`。  
-- **按域 + 当前时刻取候选集**（若 Lobby 需要）：`WHERE scope = ? AND (effective_from IS NULL OR effective_from <= NOW()) AND (effective_until IS NULL OR NOW() < effective_until)` 再按业务规则取 `revision` 最大者等——**实现阶段写死一种语义**，避免「最大 revision」与「时间窗」混用产生歧义。
+- **按域 + 当前时刻取候选集**（若 Lobby 需要）：`WHERE scope = ? AND (start_time IS NULL OR start_time <= NOW()) AND (end_time IS NULL OR NOW() < end_time)`（与上表 **左闭右开** 一致）再按业务规则取 `revision` 最大者等——**实现阶段写死一种语义**，避免「最大 revision」与「时间窗」混用产生歧义。
 
 ---
 
 ### C.1 `config_id` 命名规范（**仅** `scope` + **稳定业务名**；**不含时间**）
 
-**目的**：`config_id` **长期稳定**，不随档期、赛季、活动起止而改名（否则引用它的网关 meta、脚本、Lobby 配置键都得跟着改）。**何时生效** 只由列 **`effective_from` / `effective_until`**（以及 **`revision`** 滚数据版本）表达，**禁止**把日期、赛季、周次等 **编码进 `config_id`**。
+**目的**：`config_id` **长期稳定**，不随档期、赛季、活动起止而改名（否则引用它的网关 meta、脚本、Lobby 配置键都得跟着改）。**何时生效** 只由列 **`start_time` / `end_time`**（以及 **`revision`** 滚数据版本）表达，**禁止**把日期、赛季、周次等 **编码进 `config_id`**。
 
 **推荐形态**
 
@@ -212,14 +215,14 @@ string,int32,string[],int32 = string
 | 段 | 规则 | 示例 |
 |----|------|------|
 | `{scope}` | **小写**，与表列 **`scope` 取值一致**（如 `checkin`、`reward`）。 | `checkin` |
-| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，同一业务线下 **语义稳定** 的短名（如 `daily`、`vip_line`、`double_card`）。档期变化 → **改 `effective_*` 或增 `revision`**，**不换 `slug`**。 | `daily` |
+| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，同一业务线下 **语义稳定** 的短名（如 `daily`、`vip_line`、`double_card`）。档期变化 → **改 `start_time`/`end_time` 或增 `revision`**，**不换 `slug`**。 | `daily` |
 
 **完整示例**
 
 | `config_id` | 建议 `scope` | `title` 示例 | 说明 |
 |-------------|--------------|--------------|------|
-| `checkin_daily` | `checkin` | 每日签到参数 | 生效窗用 `effective_*`；换赛季仍用同一 `config_id` 亦可，靠 revision + 列。 |
-| `reward_double_card` | `reward` | 双倍卡活动 | **勿** 写成 `reward_double_202604` 这类带日期 id；2026-04 档期只写在 **`effective_from`/`effective_until`** 与 `title`。 |
+| `checkin_daily` | `checkin` | 每日签到参数 | 生效窗用 **`start_time`/`end_time`**；换赛季仍用同一 `config_id` 亦可，靠 revision + 列。 |
+| `reward_double_card` | `reward` | 双倍卡活动 | **勿** 写成 `reward_double_202604` 这类带日期 id；档期只写在 **`start_time`/`end_time`** 与 `title`。 |
 
 **校验（打表工具推荐）**
 
@@ -325,7 +328,7 @@ lobby_config:
 
 - [ ] **Step 1（TDD）**：无迁移前可写 **集成测试跳过**（`testing.Short()`）或仅文档；迁移落地后补 **repository 单测**（Task 4）用 **sqlmock** 或嵌入式 DB。
 
-- [ ] **Step 2**：按上文 **§C + §C.1** 建表：含 **`scope`、`title`、`tags`、`effective_from`、`effective_until`**；**不含** `env`、`status`；索引含 `idx_scope_config_rev`、`idx_scope_effective`；`UNIQUE(config_id,revision)` 保留。
+- [ ] **Step 2**：按上文 **§C + §C.1** 建表：含 **`scope`、`title`、`tags`、`start_time`、`end_time`**；**不含** `env`、`status`；索引含 `idx_scope_config_rev`、`idx_scope_time`；`UNIQUE(config_id,revision)` 保留。
 
 - [ ] **Step 3**：本地 `migrate up` 验证（命令与 `spec.md` / README 一致）。
 
