@@ -199,33 +199,32 @@ string,int32,string[],int32 = string
 
 ---
 
-### C.1 `config_id` 命名规范（体现 **scope** 与 **生效意图**）
+### C.1 `config_id` 命名规范（**仅** `scope` + **稳定业务名**；**不含时间**）
 
-**目的**：让人与脚本 **不看表结构** 也能从 **`config_id` 字符串** 读出 **大致业务域** 与 **时间/周期意图**；**精确生效**仍以列 **`effective_from` / `effective_until`** 为准。
+**目的**：`config_id` **长期稳定**，不随档期、赛季、活动起止而改名（否则引用它的网关 meta、脚本、Lobby 配置键都得跟着改）。**何时生效** 只由列 **`effective_from` / `effective_until`**（以及 **`revision`** 滚数据版本）表达，**禁止**把日期、赛季、周次等 **编码进 `config_id`**。
 
 **推荐形态**
 
 ```text
-{scope}_{slug}[_{time_hint}]
+{scope}_{slug}
 ```
 
 | 段 | 规则 | 示例 |
 |----|------|------|
 | `{scope}` | **小写**，与表列 **`scope` 取值一致**（如 `checkin`、`reward`）。 | `checkin` |
-| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，表内业务含义（如 `daily`、`double_card`）。 | `daily` |
-| `{time_hint}` | **可选**；人读用 **周期/日期意图**，不替代数据库时间窗。建议：`YYYYMMDD`、`YYYYMM`、`YYYYs1`（赛季）、`2026w15`（周）等 **团队内统一词典**。 | `_20260401` |
+| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，同一业务线下 **语义稳定** 的短名（如 `daily`、`vip_line`、`double_card`）。档期变化 → **改 `effective_*` 或增 `revision`**，**不换 `slug`**。 | `daily` |
 
 **完整示例**
 
 | `config_id` | 建议 `scope` | `title` 示例 | 说明 |
 |-------------|--------------|--------------|------|
-| `checkin_daily` | `checkin` | 每日签到参数 | 无时间片 = 长期有效（或靠 `effective_*` 列限定）。 |
-| `reward_double_202604` | `reward` | 2026-04 双倍 | 命名带月份意图；**精确开闭**仍填 `effective_from`/`effective_until`。 |
+| `checkin_daily` | `checkin` | 每日签到参数 | 生效窗用 `effective_*`；换赛季仍用同一 `config_id` 亦可，靠 revision + 列。 |
+| `reward_double_card` | `reward` | 双倍卡活动 | **勿** 写成 `reward_double_202604` 这类带日期 id；2026-04 档期只写在 **`effective_from`/`effective_until`** 与 `title`。 |
 
 **校验（打表工具推荐）**
 
-- `strings.HasPrefix(config_id, scope + "_")` 或通过 **`config_id` 首段 = `scope`** 的拆分规则校验。  
-- **`time_hint` 与 `effective_*` 不一致**时：**以列为准**，命名仅 Warn 或打表失败（团队二选一）。
+- **`config_id` 不得匹配日期/赛季类后缀**（可实现为：禁止 `_20\d{2}` 等简单模式，或人工 code review + CI 名单）。  
+- `strings.HasPrefix(config_id, scope + "_")` 或 **`config_id` 首段 = `scope`** 的拆分规则与列 **`scope`** 一致。
 
 ---
 
