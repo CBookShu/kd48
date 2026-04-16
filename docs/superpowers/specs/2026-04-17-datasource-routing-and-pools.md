@@ -32,7 +32,7 @@
 ### 2.3 路由规则（前缀 → 池）
 
 - 配置为 **有序列表**（展示顺序 **仅用于人类阅读**；匹配语义 **以 LPM 为准**，见 §3）。  
-- 每条规则：`prefix`（非空字符串）+ `pool`（命名池 id）。  
+- 每条规则：`prefix`（**允许** `""`，见 §3）+ `pool`（命名池 id）。  
 - **含义**：若 `routing_key` 以某规则的 `prefix` 为前缀，则该规则 **候选**；在 **所有候选中取 `prefix` 最长** 的一条，其 `pool` 即为解析结果。
 
 ---
@@ -42,8 +42,8 @@
 **算法（规范级）**（与 Go `strings.HasPrefix(routing_key, prefix)` 一致）：
 
 1. 收集所有满足 **`HasPrefix(routing_key, rule.prefix)`** 的规则。  
-   - **注意**：`prefix == ""` 时 **恒为候选**（因 `HasPrefix(s, "") == true`），其长度为 0；**只要存在更长 `prefix` 的候选，LPM 必不选空串规则**，故可将 **`prefix: ""`** 用作 **兜底池**（策略 B）。  
-2. 若无候选：**见 §5 未命中策略**。  
+   - **注意**：`prefix == ""` 时 **恒为候选**（因 `HasPrefix(s, "") == true`），其长度为 0；**只要存在更长 `prefix` 的候选，LPM 必不选空串规则**。若需「其余未单独列前缀的 key 全部进主池」，须在路由表中 **显式** 增加 `{ prefix: "", pool: "default" }`——仍是普通规则，**不是**隐式默认池。  
+2. 若无候选：**§5（策略 A）**：`Resolve*` **返回错误**。  
 3. 若有候选：取 **`len(prefix)` 最大** 的一条；若仍并列（同长度多条），**启动校验失败**（配置非法，拒绝进程启动或拒绝加载该段配置）。
 
 **示例**
@@ -76,18 +76,14 @@
 ### 4.3 与调用链的关系
 
 - **网关 / User / Lobby** 等：在「某条业务管线」入口选定 **`routing_key`**（或从 RPC/metadata 映射），之后 **同一次请求内** 对该域的访问应 **一致地** 使用解析结果（可缓存在 `context` 或请求局部变量中，属实现细节）。  
-- **禁止**：在不知道 `routing_key` 归属的情况下，直接持有全局单例 DB/Redis 执行写路径（M0 单池代码路径可保留为 **`default` 池 + 单条空 prefix 或显式 `routing_key="default"`**，见 §5）。
+- **禁止**：在不知道 `routing_key` 归属的情况下，直接持有全局单例 DB/Redis 执行写路径。M0 单池迁移：在路由表中 **显式** 配置 **`prefix: ""` → `default` 池**（或仅为各业务线配置非空前缀规则），使 **任意** 会用到的 `routing_key` 在 LPM 下 **恒有候选**，避免触发 §5 错误。
 
 ---
 
-## 5. 未命中与默认池
+## 5. 未命中策略（已定案：**策略 A**）
 
-**须在配置中二选一写死（服务级）**：
-
-- **策略 A（严格）**：无候选规则 → `Resolve*` **返回错误**（推荐用于多租户已上线的服务）。  
-- **策略 B（兼容 M0）**：声明 **`default_pool`**（MySQL / Redis 各一份或共用命名表）；无候选 → 使用 default；**须在日志中打 debug**（可选）以便发现漏配。
-
-**推荐**：新服务用 **A**；从单池迁移时短期用 **B** 并监控 `routing_key` 分布。
+- **无任一规则与 `routing_key` 形成候选**（即不存在任何规则满足 `HasPrefix(routing_key, prefix)`）→ **`ResolveDB` / `ResolveRedis` 必须返回错误**；**禁止** 回落到未在路由表中声明的「隐式默认池」。  
+- **与 `prefix: ""` 的关系**：配置了 `{ prefix: "", pool: "default" }` 时，**任意** `routing_key` 至少有一条候选（空串规则），LPM 在存在更长前缀匹配时仍优先更长规则；**未配置**空串规则时，许多 `routing_key` 可能 **无候选** → 报错。是否配置空串兜底由 **服务路由表** 显式决定。
 
 ---
 
@@ -105,9 +101,9 @@ data_sources:
     session:   { addr: "redis-session:6379" }
     lobby_cfg: { addr: "redis-lobby:6379" }
 
-  mysql_routes:   # LPM：更长 prefix 优先
+  mysql_routes:   # LPM：更长 prefix 优先；策略 A：无候选即 Resolve 报错
     - { prefix: "lobby:", pool: "lobby" }
-    - { prefix: "", pool: "default" }   # 仅当采用策略 B；prefix 空表示兜底（长度 0，LPM 时最后考虑）
+    - { prefix: "", pool: "default" }   # 显式全集兜底（仍为一条普通规则，非隐式 default_pool）
 
   redis_routes:
     - { prefix: "lobby:config:", pool: "lobby_cfg" }
@@ -118,7 +114,8 @@ data_sources:
 **校验（启动时）**：
 
 - 每条规则的 `pool` 必须在对应 `*_pools` 中存在。  
-- 若采用策略 B：**必须** 存在可命中 `routing_key=""` 的兜底或显式 `default_pool` 字段（实现二选一，须在服务 README 写清）。
+- **禁止重复 `prefix`**：同一路由表内 **相同 `prefix` 值** 不得出现多条且指向 **不同** `pool`（配置非法，启动失败）。  
+- **可选**：若服务文档声明「任意 `routing_key` 必须可解析」，则启动时 **应** 校验路由表含 **`prefix: ""`** 或已枚举全部业务前缀（否则依赖测试发现漏配）。
 
 ---
 
@@ -139,6 +136,6 @@ data_sources:
 
 ## 9. 自检清单
 
-- [ ] 服务文档是否写明 **策略 A 或 B** 及 default 行为？  
+- [ ] 服务文档是否写明 **策略 A（无候选即错）** 及是否配置 **`prefix: ""` 显式兜底**？  
 - [ ] `routing_key` 的赋值点（网关 metadata / RPC 层 / 定时任务）是否可追溯？  
 - [ ] LPM 并列同长是否在 **启动时** 被拒绝？
