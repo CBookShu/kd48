@@ -21,7 +21,7 @@
 
 - **进程**：`services/lobby`，显式 DI（`sql.DB`、`redis.UniversalClient`、配置、OTel），`grpc.NewServer` 注册 **`lobby.v1.LobbyService`**（首版最小 RPC）与 **`gateway.v1.GatewayIngress`**（按 `IngressRequest.route` 用 **protojson** 分发给 Lobby RPC，与 `services/user/cmd/user/ingress.go` 同模式）。  
 - **配置**：MySQL 表（名在迁移中最终确定）存 `config_id`、`revision`（或单调版本）、`csv_text`、`json_payload`（`LONGTEXT`/JSON）、`updated_at` 等；Lobby 内 **`atomic.Value` 或 `sync.RWMutex`** 持有只读快照。  
-- **变更路径**：外部打表工具 **事务写 MySQL → `PUBLISH`（或 `XADD`）Redis**；Lobby **订阅** → 收到 `config_id`+`revision` → **单条 SELECT 拉 JSON** → 校验 → `json.Unmarshal` 到 **生成或手写的 struct**（首版可用 **`LobbyConfigEnvelope` + `Data` 为 `[]LobbySheetRow`** 或等价，与 **§B `sheet_v1`** 中 `data` 数组对齐）。  
+- **变更路径**：外部打表工具 **事务写 MySQL → `PUBLISH`（或 `XADD`）Redis**；Lobby **订阅** → 收到 `config_id`+`revision` → **单条 SELECT 拉 JSON** → 校验 → `json.Unmarshal` 到 **生成或手写的 struct**（首版可用 **`LobbyConfigEnvelope` + `Data` 为 `[]LobbySheetRow`** 或等价，与 **§B** `json_payload` 中 **`data` 数组** 对齐）。  
 - **网关**：Etcd meta 增加 `kd48/lobby-service` 的 `ServiceType` + 至少一条 `WsRouteSpec`（`IngressRoute` 指向 `/lobby.v1.LobbyService/…`）；`seed-gateway-meta` 或等价种子更新。  
 - **`go.work`**：追加 `./services/lobby`。
 
@@ -29,11 +29,13 @@
 
 ---
 
-## 配置与消息格式规范（M0 可执行约定，**`sheet_v1` 已定稿**）
+## 配置与消息格式规范（M0 可执行约定）
 
-本节把设计文档里「有规则 CSV / MySQL 双存 / Redis 通知 / Go 强类型」落实为 **实现与打表工具可照着做** 的固定格式；若日后要扩展，须 **递增 `config_format_version`**（如 `sheet_v2`）或另起 `config_id`，避免静默破坏兼容。
+本节把设计文档里「有规则 CSV / MySQL 双存 / Redis 通知 / Go 强类型」落实为 **实现与打表工具可照着做** 的固定格式。**CSV→JSON 解析规则为全局一套**（由打表工具与 Lobby **同版本演进**），**不在** `json_payload` 内携带 `config_format_version` 等「文法版本」字段；若将来出现不兼容文法变更，通过 **打表工具 / Lobby 发版** 与 **另起 `config_id` 或迁移脚本** 处理，而非按条 JSON 分支。
 
-### A. 策划 CSV（`sheet_v1`，写入 MySQL 的 `csv_text` 原文）
+**§A 所述「三行头 CSV」**在文档与评审中可仍称 **`sheet_v1`**，仅表示 **该 CSV 形态的名称**，**不**写入 `json_payload`。
+
+### A. 策划 CSV（三行头 / `sheet_v1`，写入 MySQL 的 `csv_text` 原文）
 
 **编码与分隔**
 
@@ -78,7 +80,7 @@
 
 - 第三行中 **允许 `=` 两侧有任意空白**（trim 后解析）。  
 - **M0 合法组合（定稿）**：`int32 = string`、`string = int64`、`string = string`。  
-- 后续扩展（如 `int64 = string`）须 **递增 `config_format_version`** 或登记为 **自定义类型别名**，并在打表工具中实现。
+- 后续扩展（如 `int64 = string`）经 **自定义类型注册** 或 **统一升级打表工具与 Lobby** 实现；不依赖 `json_payload` 内文法版本字段。
 
 **Map 单元格内容（定稿）**
 
@@ -119,22 +121,22 @@ string,int32,string[],int32 = string
 
 ---
 
-### B. MySQL：`json_payload` 与强类型 Go 的 JSON 形状（`sheet_v1`）
+### B. MySQL：`json_payload` 与强类型 Go 的 JSON 形状（与 §A 三行头 CSV 对应）
 
 **根对象（必须字段）**
 
 | JSON 键 | 类型 | 说明 |
 |---------|------|------|
-| `config_format_version` | string | **固定 `"sheet_v1"`**（与旧 `"1"` / `##SCHEMA` 格式区分） |
-| `config_id` | string | 与表字段 `config_id` 一致 |
+| `config_id` | string | 与表字段 `config_id` 一致（便于与行数据自检；亦可仅依赖 DB 列，实现阶段二选一，**须与 Lobby 解析一致**） |
 | `revision` | number | 与表字段 `revision` 一致（整数） |
 | `data` | **array** | **对象数组**：CSV 第 4 行起每一行对应 `data` 中 **一个** JSON object，键为第 2 行变量名 |
+
+**刻意不包含**：`config_format_version`（或等价「文法版本」字段）。**文法**由 **本仓库约定的解析实现 + 发版** 保证。
 
 **示例（`json_payload`）**
 
 ```json
 {
-  "config_format_version": "sheet_v1",
   "config_id": "rewards_pack_a",
   "revision": 2,
   "data": [
@@ -152,7 +154,7 @@ string,int32,string[],int32 = string
 
 **Go 侧（M0 占位，可手写后与 Task 7 生成物对齐）**
 
-- 定义 `LobbyConfigEnvelope`（`ConfigFormatVersion`、`ConfigID`、`Revision`、`Data []LobbySheetRow` 或 `Data json.RawMessage` 二次解析）。  
+- 定义 `LobbyConfigEnvelope`（`ConfigID`、`Revision`、`Data []LobbySheetRow` 或 `Data json.RawMessage` 二次解析；**无** `ConfigFormatVersion` 字段）。  
 - `json.Unmarshal`：**允许未知字段** 忽略；**`data` 必须为 JSON array**。  
 - **`revision` / `config_id` 与行不一致**：以 **MySQL 行** 为准；Lobby 打 **Warn** 并修正内存 envelope（实现写进 Task 4）。
 
@@ -312,7 +314,7 @@ lobby_config:
 
 - [ ] **Step 1（TDD）**：对 **LoadFromRow(JSON bytes) → struct** 写单测；对 **SELECT 最新 revision** 用 sqlmock。
 
-- [ ] **Step 2**：按 **§B `sheet_v1`** 实现 `LobbyConfigEnvelope` + **`Data` 为对象数组**（如 `[]LobbySheetRow`，字段与 CSV 第 2 行一致）；`json.Unmarshal` 失败时 **不替换** 旧快照并打错误日志（行为写进测试或注释）。
+- [ ] **Step 2**：按 **§B** 实现 `LobbyConfigEnvelope` + **`Data` 为对象数组**（如 `[]LobbySheetRow`，字段与 CSV 第 2 行一致）；`json.Unmarshal` 失败时 **不替换** 旧快照并打错误日志（行为写进测试或注释）。
 
 - [ ] **Step 3**：`Bootstrap(ctx)`：启动时查询当前 `config_id`（可从静态配置或环境读取）对应 **最大 `revision`** 一行，填充 `atomic.Value`。
 
@@ -358,7 +360,7 @@ lobby_config:
 
 ### Task 7（可选 / 后续）：打表工具与 Go 结构代码生成
 
-- [ ] 独立 CLI 或子模块：解析 **§A `sheet_v1`** CSV → 生成 **§B** `json_payload` → 按 **§C** 写 MySQL → 按 **§D** `PUBLISH`；顺序 **先 MySQL 再 Redis**（与设计一致）。  
+- [ ] 独立 CLI 或子模块：解析 **§A** 三行头 CSV → 生成 **§B** `json_payload` → 按 **§C** 写 MySQL → 按 **§D** `PUBLISH`；顺序 **先 MySQL 再 Redis**（与设计一致）。  
 - [ ] **从三行头生成 Go**（`make gen-config`）：第 2 行 → 字段名与 **`json` tag**；第 3 行 → Go 类型（含 `[]T`、`map[...]...` 等与 JSON 形状映射）；CI 校验生成物已提交。  
 - [ ] 本 Task **可与 Lobby 运行时开发并行**，不阻塞 Task 1～6 的 M0 打通。
 

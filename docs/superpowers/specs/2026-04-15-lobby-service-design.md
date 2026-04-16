@@ -53,7 +53,7 @@
 
 - CSV 为 **有规则表**：含 **字段类型、字段名、中文注释** 等元信息约定（可由表头行、独立 schema 文件或工具约定表达，实现阶段细化）。
 - 打表工具对 CSV 做 **类型与业务校验**，通过后生成 **JSON**。
-- **可执行格式（M0，已定稿 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string`**、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map（单元格 `键 = 值` 多条用 `|`）**；`json_payload` 中 **`config_format_version":"sheet_v1"`** 且 **`data` 为对象数组**；MySQL 表、Redis 通知等见 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) **「配置与消息格式规范」** 整节；本设计规格不重复展开，以免双源漂移。
+- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string`**、**`T[]`（`|` 分隔，`string[]` 元素须 `''`/`""`）**、**`int32 = string` 等 map（单元格 `键 = 值` 多条用 `|`）**；**`json_payload` 不含 `config_format_version`**（解析规则为 **全局一套**，由打表工具与 Lobby **同版本**保证）；载荷根对象为 **`config_id`、`revision`、`data`（对象数组）** 等，见实现计划 **§B**；MySQL 表、Redis 通知等同上引用。
 
 ### 4.2 MySQL 持久化（权威）
 
@@ -97,16 +97,17 @@
 
 > 下列为 **M0 拟议形状**：用于判断 **配置 JSON 是否合理**、**gRPC 是否好接网关**、**Lobby 内部边界是否清晰**；实现时可微调命名，但 **语义** 不宜无协商漂移。细则仍以 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) 为准。
 
-### 6.1 配置 JSON（`sheet_v1` 载荷）
+### 6.1 配置 JSON（`json_payload` 载荷）
 
 **根对象（存入 MySQL `json_payload`）**
 
 | 字段 | JSON 类型 | 说明 |
 |------|-----------|------|
-| `config_format_version` | string | 固定 `"sheet_v1"` |
-| `config_id` | string | 逻辑配置 id，与 DB 行一致 |
+| `config_id` | string | 逻辑配置 id，与 DB 行一致（与 `revision` 一并便于自检） |
 | `revision` | number | 与 DB 行一致 |
 | `data` | **array of object** | 每个元素对应 CSV 一条数据行；对象 **键 = CSV 第 2 行变量名** |
+
+**不包含**：`config_format_version`。CSV→JSON **文法**不随条目标注；演进依赖 **工具/Lobby 发版**（与 §4.5 一致）。
 
 **`data[]` 中一条记录（与根目录 `exp.csv` 列对齐的示例形状）**
 
@@ -122,10 +123,9 @@
 ```go
 // 信封：Lobby 进程内只读快照的顶层反序列化目标。
 type LobbyConfigEnvelope struct {
-	ConfigFormatVersion string           `json:"config_format_version"`
-	ConfigID            string           `json:"config_id"`
-	Revision            int64            `json:"revision"`
-	Data                []LobbySheetRow  `json:"data"` // 或 json.RawMessage + 二次解析，见实现计划
+	ConfigID string           `json:"config_id"`
+	Revision int64            `json:"revision"`
+	Data     []LobbySheetRow  `json:"data"` // 或 json.RawMessage + 二次解析，见实现计划
 }
 
 // 与当前示例 CSV 列一一对应；Task 7 可由打表工具改为生成此 struct。
