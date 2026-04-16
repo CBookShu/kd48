@@ -1,7 +1,7 @@
 # Lobby 服务设计（活动域 + 策划配置管线）
 
 > **状态**：已获「可以落盘」许可，brainstorming 收口落盘。  
-> **关联**：根目录 [`spec.md`](../../../spec.md) §3～§6；[网关与后端连接设计](./2026-04-13-gateway-backend-connection-design.md)（Ingress、Etcd、客户端入口）；[路线图](./2026-04-13-kd48-roadmap.md)。  
+> **关联**：根目录 [`spec.md`](../../../spec.md) §3～§6；[网关与后端连接设计](./2026-04-13-gateway-backend-connection-design.md)（Ingress、Etcd、客户端入口）；[路线图](./2026-04-13-kd48-roadmap.md)；[Lobby 策划 CSV 与打表工具规格](./2026-04-16-lobby-config-csv-and-tooling-spec.md)（**§2～§5**：CSV、`json_payload`、示例、工具）。  
 > **日期**：2026-04-15  
 
 ---
@@ -51,9 +51,8 @@
 
 ### 4.1 CSV 与表结构
 
-- CSV 为 **有规则表**：含 **字段类型、字段名、中文注释** 等元信息约定（可由表头行、独立 schema 文件或工具约定表达，实现阶段细化）。
-- 打表工具对 CSV 做 **类型与业务校验**，通过后生成 **JSON**。
-- **可执行格式（M0，三行头 CSV，文档内可称 `sheet_v1`）**：CSV **三行头**（中文说明 / 变量名 / 类型）+ **第 4 行起数据行**；类型含 **`int32,int64,string,time`**（`time`：**`YYYY-MM-DD HH:MM:SS`** 无时区）、**`T[]`**、**`int32 = string` 等 map**；**空单元格默认**：数字 **`0`**、字符串 **`""`**、数组 **`[]`**、map **`{}`**；**`time` 不得空**；**不使用 `?` 标记**——见实现计划 **§A「空值与默认」**；**`json_payload` 不含 `config_format_version`**；载荷见 **§B**；MySQL、Redis 同上引用。
+- **CSV 文法、类型、空值默认、Map/`[]` 规则、打表工具输入输出** 的 **单一信源**：[Lobby 策划 CSV 与打表工具规格](./2026-04-16-lobby-config-csv-and-tooling-spec.md)（**§2～§5**；**§4** 含 CSV 与转换后 `json_payload` 示例）。
+- 本设计只强调：**MySQL 存 CSV 原文 + 生成 JSON**；**Redis 仅通知**；打表 **先 MySQL 再 Redis**（见 §4.3）。
 
 ### 4.2 MySQL 持久化（权威）
 
@@ -95,21 +94,13 @@
 
 ## 6. 数据结构与接口草图（评审用）
 
-> 下列为 **M0 拟议形状**：用于判断 **配置 JSON 是否合理**、**gRPC 是否好接网关**、**Lobby 内部边界是否清晰**；实现时可微调命名，但 **语义** 不宜无协商漂移。细则仍以 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) 为准。
+> 下列为 **M0 拟议形状**：用于判断 **配置 JSON 是否合理**、**gRPC 是否好接网关**、**Lobby 内部边界是否清晰**；实现时可微调命名，但 **语义** 不宜无协商漂移。**`json_payload` 字段级约定与 CSV→JSON 示例** 以 [策划 CSV 规格](./2026-04-16-lobby-config-csv-and-tooling-spec.md) **§3、§4** 为准；**表与运行时** 以 [Lobby 实现计划](../plans/2026-04-15-lobby-service-implementation-plan.md) **§C 起** 为准。
 
 ### 6.1 配置 JSON（`json_payload` 载荷）
 
-**根对象（存入 MySQL `json_payload`）**
+**摘要**：根对象含 `config_id`、`revision`、`data`（**object 数组**；键与 CSV 第 2 行一致）；**不含** `config_format_version`。完整表与 **多组 CSV / JSON 对照示例** 见策划 CSV 规格 **§3、§4**。
 
-| 字段 | JSON 类型 | 说明 |
-|------|-----------|------|
-| `config_id` | string | 逻辑配置 id，与 DB 行一致（与 `revision` 一并便于自检） |
-| `revision` | number | 与 DB 行一致 |
-| `data` | **array of object** | 每个元素对应 CSV 一条数据行；对象 **键 = CSV 第 2 行变量名** |
-
-**不包含**：`config_format_version`。CSV→JSON **文法**不随条目标注；演进依赖 **工具/Lobby 发版**（与 §4.5 一致）。
-
-**`data[]` 中一条记录（与根目录 `exp.csv` 列对齐的示例形状）**
+**`data[]` 一条记录（与根目录 `exp.csv` 列对齐的示意，详例见专项 §4）**
 
 | 键 | JSON 类型 | 来源列 / 类型行 |
 |----|------------|-----------------|
