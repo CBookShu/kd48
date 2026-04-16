@@ -301,7 +301,7 @@ lobby_config:
 
 - [ ] **Step 1（TDD）**：无迁移前可写 **集成测试跳过**（`testing.Short()`）或仅文档；迁移落地后补 **repository 单测**（Task 4）用 **sqlmock** 或嵌入式 DB。
 
-- [ ] **Step 2**：按上文 **§C「MySQL 表结构」** 建表（列名、类型、`UNIQUE(config_id,revision)`、`idx_config_latest`）；与设计文档概念一致。
+- [ ] **Step 2**：按上文 **§C「MySQL 表结构」** 建表：含 **`env` / `scope` / `status` / `title` / `tags` / 生效窗 / 审计** 等列及 **§C 所列组合索引**；`UNIQUE(config_id,revision)` 保留。
 
 - [ ] **Step 3**：本地 `migrate up` 验证（命令与 `spec.md` / README 一致）。
 
