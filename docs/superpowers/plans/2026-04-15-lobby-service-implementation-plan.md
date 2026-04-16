@@ -162,26 +162,70 @@ string,int32,string[],int32 = string
 
 ### C. MySQL 表结构（建议名与列，迁移时可微调但须同步本文档）
 
-**表名（建议）**：`lobby_config_revision`
+**表名（建议）**：`lobby_config_revision`（**一行 = 某 `config_id` 的某一版 revision**）。
 
-| 列名 | 类型 | 说明 |
-|------|------|------|
-| `id` | `BIGINT` PK AUTO_INCREMENT | 代理键 |
-| `config_id` | `VARCHAR(64)` NOT NULL | 逻辑配置 id，如 `global`、活动包 id |
-| `revision` | `BIGINT` NOT NULL | 单调递增（**每个 `config_id` 内**单调，由打表工具保证） |
-| `csv_text` | `MEDIUMTEXT` NOT NULL | 策划 CSV 原文 |
-| `json_payload` | `JSON` NOT NULL | MySQL 8 JSON；若环境限制可改为 `LONGTEXT` + 应用层校验 |
-| `created_at` | `DATETIME(3)` 或 `TIMESTAMP(3)` | 写入时间，默认 `CURRENT_TIMESTAMP(3)` |
+**刻意不包含（已定案）**
+
+- **`env` / 环境列**：**不同环境用不同数据库实例**，不在表内区分。  
+- **`status` / 草稿发布列**：**不做**「配置状态机」；是否可上线由 **发布流程 + 写库时机** 控制，**Lobby 不负责**在库内切 draft/published。
+
+| 列名 | 类型 | 作用（具体） |
+|------|------|----------------|
+| `id` | `BIGINT` PK AUTO_INCREMENT | 行代理键。 |
+| `config_id` | `VARCHAR(64)` NOT NULL | **稳定逻辑名**；与 **§C.1 命名规范** 一致，便于人读与检索。 |
+| `revision` | `BIGINT` NOT NULL | **该 `config_id` 内**单调递增版本号（打表工具保证）。 |
+| **`scope`** | `VARCHAR(64)` NOT NULL | **业务域**，用于筛选（如 `checkin`、`reward`、`rank`、`task`）；与 `config_id` 前缀 **应对齐**（见 §C.1），打表工具可做校验。 |
+| **`title`** | `VARCHAR(256)` NULL | **列表/搜索用短标题**（人读），可与 CSV 内某展示名一致或独立维护。 |
+| **`tags`** | `JSON` NULL | **标签 JSON 数组**（如 `["s3","pvp"]`），供 `JSON_CONTAINS` 或应用层筛选；无则 `NULL`。 |
+| **`effective_from`** | `DATETIME(3)` NULL | **生效起始**（含）；`NULL` = 不限制。 |
+| **`effective_until`** | `DATETIME(3)` NULL | **生效结束**（建议语义为 **不含** 该时刻，或实现时钉死「含/不含」并写测试）；`NULL` = 不限制。 |
+| `csv_text` | `MEDIUMTEXT` NOT NULL | 策划 CSV 原文（审计）。 |
+| `json_payload` | `JSON` NOT NULL | 打表生成的 JSON（Lobby 主读）。 |
+| `created_at` | `DATETIME(3)` NOT NULL DEFAULT CURRENT_TIMESTAMP(3) | 插入时间。 |
 
 **约束与索引**
 
 - `UNIQUE KEY uk_config_revision (`config_id`, `revision`)`  
-- `KEY idx_config_latest (`config_id`, `revision` DESC)` — 便于 `SELECT … ORDER BY revision DESC LIMIT 1`
+- `KEY idx_config_latest (`config_id`, `revision` DESC)` — 取某配置最新版。  
+- **`KEY idx_scope_config_rev (`scope`, `config_id`, `revision` DESC)`** — 按业务域 **枚举配置**、再取最新 revision。  
+- **`KEY idx_scope_effective (`scope`, `effective_from`, `effective_until`)`** — 按域 + **时间窗** 筛「某时刻应考虑的配置行」（具体谓词由运营/Lobby 查询约定）。  
+- （可选）在 `title` 上建 **FULLTEXT** — 仅当确实需要中文分词/全文再引入，M0 可只用 `LIKE` + `title` 非空约束。
 
 **查询约定（Lobby bootstrap / 通知后拉取）**
 
-- **当前生效**：`WHERE config_id = ? ORDER BY revision DESC LIMIT 1`。  
-- **按通知精确拉**：`WHERE config_id = ? AND revision = ?`（通知必带 `revision`，避免读到中间态）。
+- **按 id 取最新**：`WHERE config_id = ? ORDER BY revision DESC LIMIT 1`。  
+- **按通知精确拉**：`WHERE config_id = ? AND revision = ?`。  
+- **按域 + 当前时刻取候选集**（若 Lobby 需要）：`WHERE scope = ? AND (effective_from IS NULL OR effective_from <= NOW()) AND (effective_until IS NULL OR NOW() < effective_until)` 再按业务规则取 `revision` 最大者等——**实现阶段写死一种语义**，避免「最大 revision」与「时间窗」混用产生歧义。
+
+---
+
+### C.1 `config_id` 命名规范（体现 **scope** 与 **生效意图**）
+
+**目的**：让人与脚本 **不看表结构** 也能从 **`config_id` 字符串** 读出 **大致业务域** 与 **时间/周期意图**；**精确生效**仍以列 **`effective_from` / `effective_until`** 为准。
+
+**推荐形态**
+
+```text
+{scope}_{slug}[_{time_hint}]
+```
+
+| 段 | 规则 | 示例 |
+|----|------|------|
+| `{scope}` | **小写**，与表列 **`scope` 取值一致**（如 `checkin`、`reward`）。 | `checkin` |
+| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，表内业务含义（如 `daily`、`double_card`）。 | `daily` |
+| `{time_hint}` | **可选**；人读用 **周期/日期意图**，不替代数据库时间窗。建议：`YYYYMMDD`、`YYYYMM`、`YYYYs1`（赛季）、`2026w15`（周）等 **团队内统一词典**。 | `_20260401` |
+
+**完整示例**
+
+| `config_id` | 建议 `scope` | `title` 示例 | 说明 |
+|-------------|--------------|--------------|------|
+| `checkin_daily` | `checkin` | 每日签到参数 | 无时间片 = 长期有效（或靠 `effective_*` 列限定）。 |
+| `reward_double_202604` | `reward` | 2026-04 双倍 | 命名带月份意图；**精确开闭**仍填 `effective_from`/`effective_until`。 |
+
+**校验（打表工具推荐）**
+
+- `strings.HasPrefix(config_id, scope + "_")` 或通过 **`config_id` 首段 = `scope`** 的拆分规则校验。  
+- **`time_hint` 与 `effective_*` 不一致**时：**以列为准**，命名仅 Warn 或打表失败（团队二选一）。
 
 ---
 
@@ -282,7 +326,7 @@ lobby_config:
 
 - [ ] **Step 1（TDD）**：无迁移前可写 **集成测试跳过**（`testing.Short()`）或仅文档；迁移落地后补 **repository 单测**（Task 4）用 **sqlmock** 或嵌入式 DB。
 
-- [ ] **Step 2**：按上文 **§C「MySQL 表结构」** 建表（列名、类型、`UNIQUE(config_id,revision)`、`idx_config_latest`）；与设计文档概念一致。
+- [ ] **Step 2**：按上文 **§C + §C.1** 建表：含 **`scope`、`title`、`tags`、`effective_from`、`effective_until`**；**不含** `env`、`status`；索引含 `idx_scope_config_rev`、`idx_scope_effective`；`UNIQUE(config_id,revision)` 保留。
 
 - [ ] **Step 3**：本地 `migrate up` 验证（命令与 `spec.md` / README 一致）。
 
