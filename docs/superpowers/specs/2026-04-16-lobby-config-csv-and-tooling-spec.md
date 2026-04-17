@@ -77,8 +77,8 @@
 
 | 键 | 类型 | 说明 |
 |----|------|------|
-| `config_id` | string | 与 MySQL 行一致（自检；实现可二选一只信 DB，须全链一致） |
-| `revision` | number | 与 MySQL 行一致 |
+| `config_name` | string | **稳定配置名**（与 MySQL/通知一致）；**默认从文件名推导**（见 §5.1）。 |
+| `revision` | number | 版本号；写库/通知时须与 MySQL 行一致。校验+产出模式下默认自动生成（推荐 `unix_millis`，见 §5.1）。 |
 | `data` | **array of object** | 每个元素 = CSV 一条数据行；键 = 第 2 行变量名 |
 
 **不包含**：`config_format_version`（文法由工具 + Lobby **同版本**保证）。
@@ -98,11 +98,11 @@ string,int32,string[],int32 = string
 首登奖,10,'vip'|'hot',32='15' | 45 = "hello"
 ```
 
-**假定**打表入参 `config_id = "reward_demo"`、`revision = 1`，**生成的 `json_payload`（仅逻辑体，可嵌入 MySQL 行）**：
+**假定**输入文件名为 `RewardDemo--reward_demo.csv`（配置名推导为 `config_name = "RewardDemo"`），并显式指定 `revision = 1`（用于示例可读性），**生成的 `json_payload`（仅逻辑体，可嵌入 MySQL 行）**：
 
 ```json
 {
-  "config_id": "reward_demo",
+  "config_name": "RewardDemo",
   "revision": 1,
   "data": [
     {
@@ -138,7 +138,7 @@ string,int32,string[],int32 = string,time
 
 ```json
 {
-  "config_id": "example_b",
+  "config_name": "ExampleB",
   "revision": 1,
   "data": [
     {
@@ -152,7 +152,7 @@ string,int32,string[],int32 = string,time
 }
 ```
 
-（`config_id` / `revision` 由打表命令或流水线注入，与 DB 行一致。）
+（`config_name` / `revision` 由打表命令或流水线注入，与 DB 行一致。）
 
 ### 例 C：两行数据 + `int32[]` 空段 → `0`
 
@@ -183,16 +183,30 @@ string,int32[]
 
 ### 5.1 定位
 
-- **输入**：符合本篇 **§2** 的 CSV 文件（及命令行参数：`config_id`、`revision`、目标 DB 连接等）。  
-- **输出**：**校验后的** `json_payload`；**写入 MySQL** `lobby_config_revision`（含 `csv_text`、列 `scope`/`title`/`tags`/`start_time`/`end_time` 等由 CLI 或配套配置提供，**表结构见实现计划 §C**）；**成功后** 向 Redis **`PUBLISH`**（见实现计划 **§D**）。
+- **输入**：符合本篇 **§2** 的 CSV 文件（以及命令行参数：`--out`、可选 `--revision`；写库/通知模式还需要目标 DB/Redis 连接等）。  
+- **输出（默认：校验 + 产出模式）**：**校验后的** `json_payload` 写入 `--out` 指定文件；stdout 仅日志与错误信息。  
+- **输出（可选：写库 + 通知模式）**：在校验+产出的基础上，**写入 MySQL** `lobby_config_revision`（表结构见实现计划 §C），并在 MySQL 提交成功后向 Redis **`PUBLISH`**（见实现计划 **§D**）。
+
+**`config_name` 推导（必须一致）**
+
+- 文件名规范：`<ConfigName>--<desc1>--<desc2>.csv`  
+- `ConfigName`：UpperCamelCase（驼峰首字母大写），建议正则 `^[A-Z][A-Za-z0-9]*$`；必须在团队内 **唯一且稳定**（用于 DB 查询与通知键）。  
+- `--<desc...>`：纯描述信息，不影响生成与校验；可包含日期、负责人、环境等。  
+- 推导规则：取 basename 去掉 `.csv` 后，按 `--` split，**第 1 段**为 `config_name`；其余段仅用于日志。
+
+**`revision` 默认策略（推荐）**
+
+- 若未显式传入：`revision = unix_millis`（毫秒时间戳，等价 `time.Now().UnixMilli()`）。  
+- 允许显式 `--revision` 覆盖（便于回放、对账、可读示例）。
 
 ### 5.2 处理流水线（须实现）
 
 1. **读入 CSV** → 校验三行头、列数、变量名正则。  
 2. **逐数据行**：按第三行类型解析单元格；违反 **§2.3**（如 `time` 空）→ **退出码非 0**，**不写库**。  
 3. **组装** `json_payload`（§3）。  
-4. **事务**：`INSERT` MySQL（顺序：**先提交数据**）。  
-5. **`PUBLISH`** Redis 通知（**仅**在 MySQL 提交成功后）。
+4. **写出**：将 `json_payload` 写入 `--out` 文件（建议临时文件 + 原子替换）。  
+5. **（可选）事务写库**：`INSERT` MySQL（顺序：**先提交数据**）。  
+6. **（可选）`PUBLISH`** Redis 通知（**仅**在 MySQL 提交成功后）。
 
 ### 5.3 与 Lobby 的边界
 

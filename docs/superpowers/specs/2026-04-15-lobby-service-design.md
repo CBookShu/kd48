@@ -56,25 +56,25 @@
 
 ### 4.2 MySQL 持久化（权威）
 
-除 **`config_id`、`revision`、正文（`csv_text` / `json_payload`）、`created_at`** 外，增加 **`scope`、`title`、`tags`、`start_time` / `end_time`（生效窗，语义 startTime/endTime）**。**不** 用表内 `env`；**不** 用 `status`。**`config_id` 命名** 见 [实现计划 §C.1](../plans/2026-04-15-lobby-service-implementation-plan.md)（**不把时间写进 id**；生效靠 **`start_time`/`end_time` + `revision`**）。
+除 **`config_name`、`revision`、正文（`csv_text` / `json_payload`）、`created_at`** 外，增加 **`scope`、`title`、`tags`、`start_time` / `end_time`（生效窗，语义 startTime/endTime）**。**不** 用表内 `env`；**不** 用 `status`。**`config_name`** 为稳定逻辑名：来自打表工具对文件名的规范与推导（见 [策划 CSV 规格](./2026-04-16-lobby-config-csv-and-tooling-spec.md) **§5.1**）；**不把时间写进 `config_name`**；生效靠 **`start_time`/`end_time` + `revision`**。
 
 | 概念 | 含义 |
 |------|------|
 | CSV 原文 | 产品侧产出的源文本，便于审计与 diff。 |
 | JSON 载荷 | 校验通过后写入，供 Lobby `json.Unmarshal` 至 **生成的 Go 类型**。 |
 | 版本 / revision | 单调递增或等价机制，用于并发更新与对账。 |
-| **scope / title / tags / start_time / end_time** | **筛选与运营列表**；**生效时间只以这两列为准**，`config_id` 保持稳定。 |
+| **scope / title / tags / start_time / end_time** | **筛选与运营列表**；**生效时间只以这两列为准**，`config_name` 保持稳定。 |
 
 ### 4.3 Redis：仅用于「有变更」通知
 
 - **禁止** 以「Lobby 周期性轮询 MySQL 比较版本」作为 **变更发现的主路径**。
-- 推荐模式：**MySQL 为正文权威**；**Redis Pub/Sub** 或 **Redis Stream** 承载 **轻量通知**（例如 `config_id` + `version` / `revision`，正文不放或仅放 hash 摘要）。
+- 推荐模式：**MySQL 为正文权威**；**Redis Pub/Sub** 或 **Redis Stream** 承载 **轻量通知**（例如 `config_name` + `version` / `revision`，正文不放或仅放 hash 摘要）。
 - **打表工具写库顺序（必须）**：**先** 在事务内 **提交 MySQL**，**再** 向 Redis **发布通知**。若顺序颠倒，Lobby 可能在通知到达后读到未提交或旧数据。
 
 ### 4.4 Lobby 加载行为
 
 1. **启动（bootstrap）**：每个副本 **至少一次** 从 MySQL 读取当前生效配置并构建内存只读快照（冷启动基线；**不属于**「轮询比较变更」）。  
-2. **运行期**：订阅 Redis 通知 → 收到后按 **`config_id` + `version`**（或等价）**从 MySQL 拉取对应 JSON** → 校验 → `Unmarshal` 到生成结构 → **原子替换** 内存快照。  
+2. **运行期**：订阅 Redis 通知 → 收到后按 **`config_name` + `version`**（或等价）**从 MySQL 拉取对应 JSON** → 校验 → `Unmarshal` 到生成结构 → **原子替换** 内存快照。  
 3. **丢消息与重连**：实现阶段在「仅事件驱动」与「重连后对账一次 MySQL」之间选型；**不** 将高频轮询 MySQL 作为默认策略。若采用 **Stream + 消费者组**，可强化 **至少一次** 投递语义。
 
 ### 4.5 Go 代码生成与 JSON 契约
@@ -98,7 +98,7 @@
 
 ### 6.1 配置 JSON（`json_payload` 载荷）
 
-**摘要**：根对象含 `config_id`、`revision`、`data`（**object 数组**；键与 CSV 第 2 行一致）；**不含** `config_format_version`。完整表与 **多组 CSV / JSON 对照示例** 见策划 CSV 规格 **§3、§4**。
+**摘要**：根对象含 `config_name`、`revision`、`data`（**object 数组**；键与 CSV 第 2 行一致）；**不含** `config_format_version`。完整表与 **多组 CSV / JSON 对照示例** 见策划 CSV 规格 **§3、§4**。
 
 **`data[]` 一条记录（与根目录 `exp.csv` 列对齐的示意，详例见专项 §4）**
 
@@ -114,7 +114,7 @@
 ```go
 // 信封：Lobby 进程内只读快照的顶层反序列化目标。
 type LobbyConfigEnvelope struct {
-	ConfigID string           `json:"config_id"`
+	ConfigName string         `json:"config_name"`
 	Revision int64            `json:"revision"`
 	Data     []LobbySheetRow  `json:"data"` // 或 json.RawMessage + 二次解析，见实现计划
 }
@@ -169,8 +169,8 @@ message PingReply {
 ```go
 // 从 MySQL 拉取并解析为信封；由 bootstrap / Redis 通知触发。
 type ConfigLoader interface {
-	LoadLatest(ctx context.Context, configID string) (*LobbyConfigEnvelope, error)
-	LoadRevision(ctx context.Context, configID string, revision int64) (*LobbyConfigEnvelope, error)
+	LoadLatest(ctx context.Context, configName string) (*LobbyConfigEnvelope, error)
+	LoadRevision(ctx context.Context, configName string, revision int64) (*LobbyConfigEnvelope, error)
 }
 
 // 订阅 Redis；收到消息后调用 Loader 再原子替换快照。

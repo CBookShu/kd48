@@ -20,8 +20,8 @@
 **Architecture:**
 
 - **进程**：`services/lobby`，显式 DI（`sql.DB`、`redis.UniversalClient`、配置、OTel），`grpc.NewServer` 注册 **`lobby.v1.LobbyService`**（首版最小 RPC）与 **`gateway.v1.GatewayIngress`**（按 `IngressRequest.route` 用 **protojson** 分发给 Lobby RPC，与 `services/user/cmd/user/ingress.go` 同模式）。  
-- **配置**：MySQL 表（名在迁移中最终确定）存 `config_id`、`revision`（或单调版本）、`csv_text`、`json_payload`（`LONGTEXT`/JSON）、`updated_at` 等；Lobby 内 **`atomic.Value` 或 `sync.RWMutex`** 持有只读快照。  
-- **变更路径**：外部打表工具 **事务写 MySQL → `PUBLISH`（或 `XADD`）Redis**；Lobby **订阅** → 收到 `config_id`+`revision` → **单条 SELECT 拉 JSON** → 校验 → `json.Unmarshal` 到 **生成或手写的 struct**（首版可用 **`LobbyConfigEnvelope` + `Data` 为 `[]LobbySheetRow`** 或等价，与 [策划 CSV 规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md) **§3** `json_payload` 中 **`data` 数组** 对齐）。  
+- **配置**：MySQL 表（名在迁移中最终确定）存 `config_name`、`revision`（或单调版本）、`csv_text`、`json_payload`（`LONGTEXT`/JSON）、`updated_at` 等；Lobby 内 **`atomic.Value` 或 `sync.RWMutex`** 持有只读快照。  
+- **变更路径**：外部打表工具 **事务写 MySQL → `PUBLISH`（或 `XADD`）Redis**；Lobby **订阅** → 收到 `config_name`+`revision` → **单条 SELECT 拉 JSON** → 校验 → `json.Unmarshal` 到 **生成或手写的 struct**（首版可用 **`LobbyConfigEnvelope` + `Data` 为 `[]LobbySheetRow`** 或等价，与 [策划 CSV 规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md) **§3** `json_payload` 中 **`data` 数组** 对齐）。  
 - **网关**：Etcd meta 增加 `kd48/lobby-service` 的 `ServiceType` + 至少一条 `WsRouteSpec`（`IngressRoute` 指向 `/lobby.v1.LobbyService/…`）；`seed-gateway-meta` 或等价种子更新。  
 - **`go.work`**：追加 `./services/lobby`。
 
@@ -34,13 +34,13 @@
 **CSV（`sheet_v1`）、`json_payload`、空值默认、内置类型、Map 语法、打表工具流水线** 的 **单一信源** 为专项规格：
 → **[Lobby 策划 CSV 与打表工具规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md)**（含 **§4 配置示例与转换后的 JSON 示例**）。
 
-下文 **§C 起** 保留 MySQL 表 **`lobby_config_revision`**、**§C.1** `config_id` 命名、**Redis（§D）**、**Lobby `config.yaml`（§E）** 及 **Task 映射（§F）**。Lobby / 打表实现解析 CSV、`json_payload` 时须与专项规格一致。
+下文 **§C 起** 保留 MySQL 表 **`lobby_config_revision`**、**§C.1** `config_name` 命名、**Redis（§D）**、**Lobby `config.yaml`（§E）** 及 **Task 映射（§F）**。Lobby / 打表实现解析 CSV、`json_payload` 时须与专项规格一致。
 
 ---
 
 ### C. MySQL 表结构（建议名与列，迁移时可微调但须同步本文档）
 
-**表名（建议）**：`lobby_config_revision`（**一行 = 某 `config_id` 的某一版 revision**）。
+**表名（建议）**：`lobby_config_revision`（**一行 = 某 `config_name` 的某一版 revision**）。
 
 **刻意不包含（已定案）**
 
@@ -50,9 +50,9 @@
 | 列名 | 类型 | 作用（具体） |
 |------|------|----------------|
 | `id` | `BIGINT` PK AUTO_INCREMENT | 行代理键。 |
-| `config_id` | `VARCHAR(64)` NOT NULL | **稳定逻辑名**；与 **§C.1 命名规范** 一致，便于人读与检索。 |
-| `revision` | `BIGINT` NOT NULL | **该 `config_id` 内**单调递增版本号（打表工具保证）。 |
-| **`scope`** | `VARCHAR(64)` NOT NULL | **业务域**，用于筛选（如 `checkin`、`reward`、`rank`、`task`）；与 `config_id` 前缀 **应对齐**（见 §C.1），打表工具可做校验。 |
+| `config_name` | `VARCHAR(64)` NOT NULL | **稳定配置名**；与 [策划 CSV 规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md) **§5.1** 文件名规范与推导一致，便于人读与检索。 |
+| `revision` | `BIGINT` NOT NULL | **该 `config_name` 内**版本号（打表工具保证；推荐 `unix_millis`）。 |
+| **`scope`** | `VARCHAR(64)` NOT NULL | **业务域**，用于筛选（如 `checkin`、`reward`、`rank`、`task`）；与 `config_name` 建议保持语义对齐，打表工具可做校验。 |
 | **`title`** | `VARCHAR(256)` NULL | **列表/搜索用短标题**（人读），可与 CSV 内某展示名一致或独立维护。 |
 | **`tags`** | `JSON` NULL | **标签 JSON 数组**（如 `["s3","pvp"]`），供 `JSON_CONTAINS` 或应用层筛选；无则 `NULL`。 |
 | **`start_time`** | `DATETIME(3)` NULL | **生效起始**（口语 **startTime**）；`NULL` = 不限制。 |
@@ -63,46 +63,45 @@
 
 **约束与索引**
 
-- `UNIQUE KEY uk_config_revision (`config_id`, `revision`)`  
-- `KEY idx_config_latest (`config_id`, `revision` DESC)` — 取某配置最新版。  
-- **`KEY idx_scope_config_rev (`scope`, `config_id`, `revision` DESC)`** — 按业务域 **枚举配置**、再取最新 revision。  
+- `UNIQUE KEY uk_config_revision (`config_name`, `revision`)`  
+- `KEY idx_config_latest (`config_name`, `revision` DESC)` — 取某配置最新版。  
+- **`KEY idx_scope_config_rev (`scope`, `config_name`, `revision` DESC)`** — 按业务域 **枚举配置**、再取最新 revision。  
 - **`KEY idx_scope_time (`scope`, `start_time`, `end_time`)`** — 按域 + **时间窗** 筛配置行。  
 - （可选）在 `title` 上建 **FULLTEXT** — 仅当确实需要中文分词/全文再引入，M0 可只用 `LIKE` + `title` 非空约束。
 
 **查询约定（Lobby bootstrap / 通知后拉取）**
 
-- **按 id 取最新**：`WHERE config_id = ? ORDER BY revision DESC LIMIT 1`。  
-- **按通知精确拉**：`WHERE config_id = ? AND revision = ?`。  
+- **按 name 取最新**：`WHERE config_name = ? ORDER BY revision DESC LIMIT 1`。  
+- **按通知精确拉**：`WHERE config_name = ? AND revision = ?`。  
 - **按域 + 当前时刻取候选集**（若 Lobby 需要）：`WHERE scope = ? AND (start_time IS NULL OR start_time <= NOW()) AND (end_time IS NULL OR NOW() < end_time)`（与上表 **左闭右开** 一致）再按业务规则取 `revision` 最大者等——**实现阶段写死一种语义**，避免「最大 revision」与「时间窗」混用产生歧义。
 
 ---
 
-### C.1 `config_id` 命名规范（**仅** `scope` + **稳定业务名**；**不含时间**）
+### C.1 `config_name` 命名规范（UpperCamelCase；**不含时间**）
 
-**目的**：`config_id` **长期稳定**，不随档期、赛季、活动起止而改名（否则引用它的网关 meta、脚本、Lobby 配置键都得跟着改）。**何时生效** 只由列 **`start_time` / `end_time`**（以及 **`revision`** 滚数据版本）表达，**禁止**把日期、赛季、周次等 **编码进 `config_id`**。
+**目的**：`config_name` **长期稳定**，不随档期、赛季、活动起止而改名（否则引用它的脚本、Lobby 配置键、以及未来通知/查询键都得跟着改）。**何时生效** 只由列 **`start_time` / `end_time`**（以及 **`revision`** 滚数据版本）表达，**禁止**把日期、赛季、周次等 **编码进 `config_name`**。
 
-**推荐形态**
+**推荐形态（与打表工具保持一致）**
 
 ```text
-{scope}_{slug}
+{ConfigName}
 ```
 
 | 段 | 规则 | 示例 |
 |----|------|------|
-| `{scope}` | **小写**，与表列 **`scope` 取值一致**（如 `checkin`、`reward`）。 | `checkin` |
-| `{slug}` | **小写蛇形** `[a-z][a-z0-9_]*`，同一业务线下 **语义稳定** 的短名（如 `daily`、`vip_line`、`double_card`）。档期变化 → **改 `start_time`/`end_time` 或增 `revision`**，**不换 `slug`**。 | `daily` |
+| `{ConfigName}` | UpperCamelCase，建议正则 `^[A-Z][A-Za-z0-9]*$`；由打表工具按文件名规范推导（见策划 CSV 规格 **§5.1**）。 | `CheckinDaily` |
 
 **完整示例**
 
-| `config_id` | 建议 `scope` | `title` 示例 | 说明 |
+| `config_name` | 建议 `scope` | `title` 示例 | 说明 |
 |-------------|--------------|--------------|------|
-| `checkin_daily` | `checkin` | 每日签到参数 | 生效窗用 **`start_time`/`end_time`**；换赛季仍用同一 `config_id` 亦可，靠 revision + 列。 |
-| `reward_double_card` | `reward` | 双倍卡活动 | **勿** 写成 `reward_double_202604` 这类带日期 id；档期只写在 **`start_time`/`end_time`** 与 `title`。 |
+| `CheckinDaily` | `checkin` | 每日签到参数 | 生效窗用 **`start_time`/`end_time`**；换赛季仍用同一 `config_name` 亦可，靠 revision + 列。 |
+| `RewardDoubleCard` | `reward` | 双倍卡活动 | **勿** 写成 `RewardDoubleCard202604` 这类带日期 name；档期只写在 **`start_time`/`end_time`** 与 `title`。 |
 
 **校验（打表工具推荐）**
 
-- **`config_id` 不得匹配日期/赛季类后缀**（可实现为：禁止 `_20\d{2}` 等简单模式，或人工 code review + CI 名单）。  
-- `strings.HasPrefix(config_id, scope + "_")` 或 **`config_id` 首段 = `scope`** 的拆分规则与列 **`scope`** 一致。
+- **`config_name` 不得匹配日期/赛季类后缀**（可实现为：禁止 `20\d{2}` 等简单模式，或人工 code review + CI 名单）。  
+- 可选：约定 `config_name` 前缀与 `scope` 对齐（如 `CheckinDaily` ↔ `checkin`），工具仅做弱校验或仅记录日志。
 
 ---
 
@@ -111,21 +110,21 @@
 **频道名（M0 固定）**
 
 - `kd48:lobby:config:notify`  
-- 多租户或极大量配置时再拆为 `kd48:lobby:config:notify:{config_id}`；M0 单频道足够，消息内带 `config_id`。
+- 多租户或极大量配置时再拆为 `kd48:lobby:config:notify:{config_name}`；M0 单频道足够，消息内带 `config_name`。
 
 **消息体：单行 JSON UTF-8（一行一个完整 JSON 对象）**
 
 | 键 | 类型 | 必填 | 说明 |
 |----|------|------|------|
 | `kind` | string | 是 | **M0 固定 `lobby_config_published`** |
-| `config_id` | string | 是 | 与 MySQL 一致 |
+| `config_name` | string | 是 | 与 MySQL 一致 |
 | `revision` | number | 是 | 与刚写入 MySQL 的行一致 |
 | `sha256` | string | 否 | `json_payload` 或整行 canonical 的校验（供对账，Lobby 可选用） |
 
 **示例**
 
 ```json
-{"kind":"lobby_config_published","config_id":"global","revision":3}
+{"kind":"lobby_config_published","config_name":"Global","revision":3}
 ```
 
 **顺序（再次强调）**
@@ -142,7 +141,7 @@
 
 ```yaml
 lobby_config:
-  config_id: "global"
+  config_name: "Global"
   redis_notify_channel: "kd48:lobby:config:notify"
 ```
 
@@ -155,7 +154,7 @@ lobby_config:
 | Task | 须落实的本节条目 |
 |------|------------------|
 | Task 2 | §C 表 DDL；[策划 CSV 规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md) **§3** `json_payload` 与索引 |
-| Task 4 | 策划 CSV 规格 **§3** envelope + `data`；§C 查询；§E `config_id` |
+| Task 4 | 策划 CSV 规格 **§3** envelope + `data`；§C 查询；§E `config_name` |
 | Task 5 | §D 频道与消息 JSON；重连对账 |
 | Task 7 | 策划 CSV 规格 **§2** CSV 解析与校验、**§5** 工具；写 §C；发 §D |
 
@@ -203,7 +202,7 @@ lobby_config:
 
 - [ ] **Step 1（TDD）**：无迁移前可写 **集成测试跳过**（`testing.Short()`）或仅文档；迁移落地后补 **repository 单测**（Task 4）用 **sqlmock** 或嵌入式 DB。
 
-- [ ] **Step 2**：按上文 **§C + §C.1** 建表：含 **`scope`、`title`、`tags`、`start_time`、`end_time`**；**不含** `env`、`status`；索引含 `idx_scope_config_rev`、`idx_scope_time`；`UNIQUE(config_id,revision)` 保留。
+- [ ] **Step 2**：按上文 **§C + §C.1** 建表：含 **`scope`、`title`、`tags`、`start_time`、`end_time`**；**不含** `env`、`status`；索引含 `idx_scope_config_rev`、`idx_scope_time`；`UNIQUE(config_name,revision)` 保留。
 
 - [ ] **Step 3**：本地 `migrate up` 验证（命令与 `spec.md` / README 一致）。
 
@@ -237,7 +236,7 @@ lobby_config:
 
 - [ ] **Step 2**：按 [策划 CSV 规格](../specs/2026-04-16-lobby-config-csv-and-tooling-spec.md) **§3** 实现 `LobbyConfigEnvelope` + **`Data` 为对象数组**（如 `[]LobbySheetRow`，字段与 CSV 第 2 行一致）；`json.Unmarshal` 失败时 **不替换** 旧快照并打错误日志（行为写进测试或注释）。
 
-- [ ] **Step 3**：`Bootstrap(ctx)`：启动时查询当前 `config_id`（可从静态配置或环境读取）对应 **最大 `revision`** 一行，填充 `atomic.Value`。
+- [ ] **Step 3**：`Bootstrap(ctx)`：启动时查询当前 `config_name`（可从静态配置或环境读取）对应 **最大 `revision`** 一行，填充 `atomic.Value`。
 
 - [ ] **Step 4**：`go test ./...` 通过。
 
