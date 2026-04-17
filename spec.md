@@ -30,6 +30,12 @@
 * **注册中心**：**Etcd**（承载微服务节点注册与发现）。
 * **配置中心**：**本地配置文件挂载**（基于 `viper` 读取 `/conf/config.yaml`）。前期不引入重度配置中心，通过 K8s ConfigMap 或本地卷实现环境隔离，保持架构极简。
 
+### 2.3 多数据源与连接池路由（MySQL / Redis）
+🟡 `[⚠️ 待规划/部分落地]`  
+* **需求**：在 **执行查询或 Redis 命令之前**，按 **`routing_key`（抽象路由键，与物理 Redis key 解耦）** 选择 **命名连接池**；规则为 **最长前缀匹配（LPM）**。  
+* **未命中**：**无候选规则时 `Resolve*` 须报错**（策略 **A**）；**禁止** 隐式默认池；全集兜底须在路由表中 **显式** 配置 **`prefix: ""`**（详见专项 §3）。  
+* **单一信源**：[`docs/superpowers/specs/2026-04-17-datasource-routing-and-pools.md`](docs/superpowers/specs/2026-04-17-datasource-routing-and-pools.md)（**§11** 实现约束：不热更、`pkg` 复用、MySQL/Redis 共用 LPM）。  
+
 ---
 
 ## 3. 流量网关设计

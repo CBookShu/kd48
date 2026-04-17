@@ -5,3 +5,4 @@ bin/
 .vscode/
 logs/
 *.bin
+todo

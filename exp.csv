@@ -1,0 +1,4 @@
+奖励说明,数量,标签,某映射
+note,amount,tags,extra_map
+string,int32,string[],int32 = string
+首登奖,10,'vip'|'hot',32='15' | 45 = "hello"

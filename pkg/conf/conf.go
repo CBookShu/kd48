@@ -8,14 +8,15 @@ import (
 
 // Config 全局配置结构体，后续所有的配置项都在这里扩展
 type Config struct {
-	Server      ServerConf      `mapstructure:"server"`
-	Gateway     GatewayConf     `mapstructure:"gateway"`
-	UserService UserServiceConf `mapstructure:"user_service"`
-	Log         LogConf         `mapstructure:"log"`
-	Redis       RedisConf       `mapstructure:"redis"`
-	Etcd        EtcdConf        `mapstructure:"etcd"`
-	MySQL       MysqlConf       `mapstructure:"mysql"`
-	Session     SessionConf     `mapstructure:"session"`
+	Server      ServerConf       `mapstructure:"server"`
+	Gateway     GatewayConf      `mapstructure:"gateway"`
+	UserService UserServiceConf  `mapstructure:"user_service"`
+	Log         LogConf          `mapstructure:"log"`
+	Redis       RedisConf        `mapstructure:"redis"`
+	Etcd        EtcdConf         `mapstructure:"etcd"`
+	MySQL       MysqlConf        `mapstructure:"mysql"`
+	Session     SessionConf      `mapstructure:"session"`
+	DataSources *DataSourcesConf `mapstructure:"data_sources"`
 }
 
 type ServerConf struct {
@@ -24,9 +25,9 @@ type ServerConf struct {
 }
 
 type GatewayConf struct {
-	Port                     int    `mapstructure:"port"`
-	MetaServiceTypesPrefix   string `mapstructure:"meta_service_types_prefix"`
-	MetaGatewayRoutesPrefix  string `mapstructure:"meta_gateway_routes_prefix"`
+	Port                    int    `mapstructure:"port"`
+	MetaServiceTypesPrefix  string `mapstructure:"meta_service_types_prefix"`
+	MetaGatewayRoutesPrefix string `mapstructure:"meta_gateway_routes_prefix"`
 }
 
 type UserServiceConf struct {
@@ -57,6 +58,31 @@ type SessionConf struct {
 	ExpireHours int64 `mapstructure:"expire_hours"`
 }
 
+type DataSourcesConf struct {
+	MySQLPools  map[string]MySQLPoolConf `mapstructure:"mysql_pools"`
+	RedisPools  map[string]RedisPoolConf `mapstructure:"redis_pools"`
+	MySQLRoutes []RouteRuleConf          `mapstructure:"mysql_routes"`
+	RedisRoutes []RouteRuleConf          `mapstructure:"redis_routes"`
+}
+
+type MySQLPoolConf struct {
+	DSN     string `mapstructure:"dsn"`
+	MaxOpen int    `mapstructure:"max_open"`
+	MaxIdle int    `mapstructure:"max_idle"`
+}
+
+type RedisPoolConf struct {
+	Addr     string `mapstructure:"addr"`
+	DB       int    `mapstructure:"db"`
+	Password string `mapstructure:"password"`
+	PoolSize int    `mapstructure:"pool_size"`
+}
+
+type RouteRuleConf struct {
+	Prefix string `mapstructure:"prefix"`
+	Pool   string `mapstructure:"pool"`
+}
+
 // Load 加载配置文件
 func Load(path string) (*Config, error) {
 	v := viper.New()
@@ -79,4 +105,73 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &c, nil
+}
+
+func (c *Config) GetDataSourcesOrSynthesize() *DataSourcesConf {
+	if c.DataSources != nil {
+		return c.DataSources
+	}
+	return &DataSourcesConf{
+		MySQLPools: map[string]MySQLPoolConf{
+			"default": {DSN: c.MySQL.DSN, MaxOpen: 20, MaxIdle: 5},
+		},
+		RedisPools: map[string]RedisPoolConf{
+			"default": {Addr: c.Redis.Addr, DB: c.Redis.DB, Password: c.Redis.Password},
+		},
+		MySQLRoutes: []RouteRuleConf{{Prefix: "", Pool: "default"}},
+		RedisRoutes: []RouteRuleConf{{Prefix: "", Pool: "default"}},
+	}
+}
+
+func (d *DataSourcesConf) ToDSRouteConfig() *DSRouteConfig {
+	if d == nil {
+		return nil
+	}
+	mysqlPools := make(map[string]MySQLPoolSpec)
+	for k, v := range d.MySQLPools {
+		mysqlPools[k] = MySQLPoolSpec{DSN: v.DSN, MaxOpen: v.MaxOpen, MaxIdle: v.MaxIdle}
+	}
+	redisPools := make(map[string]RedisPoolSpec)
+	for k, v := range d.RedisPools {
+		redisPools[k] = RedisPoolSpec{Addr: v.Addr, DB: v.DB, Password: v.Password, PoolSize: v.PoolSize}
+	}
+	mysqlRoutes := make([]RouteRuleSpec, len(d.MySQLRoutes))
+	for i, r := range d.MySQLRoutes {
+		mysqlRoutes[i] = RouteRuleSpec{Prefix: r.Prefix, Pool: r.Pool}
+	}
+	redisRoutes := make([]RouteRuleSpec, len(d.RedisRoutes))
+	for i, r := range d.RedisRoutes {
+		redisRoutes[i] = RouteRuleSpec{Prefix: r.Prefix, Pool: r.Pool}
+	}
+	return &DSRouteConfig{
+		MySQLPools:  mysqlPools,
+		RedisPools:  redisPools,
+		MySQLRoutes: mysqlRoutes,
+		RedisRoutes: redisRoutes,
+	}
+}
+
+type DSRouteConfig struct {
+	MySQLPools  map[string]MySQLPoolSpec
+	RedisPools  map[string]RedisPoolSpec
+	MySQLRoutes []RouteRuleSpec
+	RedisRoutes []RouteRuleSpec
+}
+
+type MySQLPoolSpec struct {
+	DSN     string
+	MaxOpen int
+	MaxIdle int
+}
+
+type RedisPoolSpec struct {
+	Addr     string
+	DB       int
+	Password string
+	PoolSize int
+}
+
+type RouteRuleSpec struct {
+	Prefix string
+	Pool   string
 }
