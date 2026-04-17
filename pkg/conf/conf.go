@@ -2,6 +2,7 @@ package conf
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -66,16 +67,22 @@ type DataSourcesConf struct {
 }
 
 type MySQLPoolConf struct {
-	DSN     string `mapstructure:"dsn"`
-	MaxOpen int    `mapstructure:"max_open"`
-	MaxIdle int    `mapstructure:"max_idle"`
+	DSN             string        `mapstructure:"dsn"`
+	MaxOpen         int           `mapstructure:"max_open"`
+	MaxIdle         int           `mapstructure:"max_idle"`
+	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
+	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time"`
 }
 
 type RedisPoolConf struct {
-	Addr     string `mapstructure:"addr"`
-	DB       int    `mapstructure:"db"`
-	Password string `mapstructure:"password"`
-	PoolSize int    `mapstructure:"pool_size"`
+	Addr         string        `mapstructure:"addr"`
+	DB           int           `mapstructure:"db"`
+	Password     string        `mapstructure:"password"`
+	PoolSize     int           `mapstructure:"pool_size"`
+	MinIdleConns int           `mapstructure:"min_idle_conns"`
+	DialTimeout  time.Duration `mapstructure:"dial_timeout"`
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
 }
 
 type RouteRuleConf struct {
@@ -129,11 +136,26 @@ func (d *DataSourcesConf) ToDSRouteConfig() *DSRouteConfig {
 	}
 	mysqlPools := make(map[string]MySQLPoolSpec)
 	for k, v := range d.MySQLPools {
-		mysqlPools[k] = MySQLPoolSpec{DSN: v.DSN, MaxOpen: v.MaxOpen, MaxIdle: v.MaxIdle}
+		mysqlPools[k] = MySQLPoolSpec{
+			DSN:             v.DSN,
+			MaxOpen:         v.MaxOpen,
+			MaxIdle:         v.MaxIdle,
+			ConnMaxLifetime: v.ConnMaxLifetime,
+			ConnMaxIdleTime: v.ConnMaxIdleTime,
+		}
 	}
 	redisPools := make(map[string]RedisPoolSpec)
 	for k, v := range d.RedisPools {
-		redisPools[k] = RedisPoolSpec{Addr: v.Addr, DB: v.DB, Password: v.Password, PoolSize: v.PoolSize}
+		redisPools[k] = RedisPoolSpec{
+			Addr:         v.Addr,
+			DB:           v.DB,
+			Password:     v.Password,
+			PoolSize:     v.PoolSize,
+			MinIdleConns: v.MinIdleConns,
+			DialTimeout:  v.DialTimeout,
+			ReadTimeout:  v.ReadTimeout,
+			WriteTimeout: v.WriteTimeout,
+		}
 	}
 	mysqlRoutes := make([]RouteRuleSpec, len(d.MySQLRoutes))
 	for i, r := range d.MySQLRoutes {
@@ -159,16 +181,22 @@ type DSRouteConfig struct {
 }
 
 type MySQLPoolSpec struct {
-	DSN     string
-	MaxOpen int
-	MaxIdle int
+	DSN             string
+	MaxOpen         int
+	MaxIdle         int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 type RedisPoolSpec struct {
-	Addr     string
-	DB       int
-	Password string
-	PoolSize int
+	Addr         string
+	DB           int
+	Password     string
+	PoolSize     int
+	MinIdleConns int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 type RouteRuleSpec struct {
