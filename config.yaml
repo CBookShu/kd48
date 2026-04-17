@@ -4,6 +4,8 @@ server:
 
 gateway:
   port: 8080
+  meta_service_types_prefix: "kd48/meta/service-types/"
+  meta_gateway_routes_prefix: "kd48/meta/gateway-routes/"
 
 user_service:
   port: 9000

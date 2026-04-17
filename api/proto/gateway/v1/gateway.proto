@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package gateway.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1";
+
+message IngressRequest {
+  string route = 1;
+  bytes json_payload = 2;
+  map<string, string> baggage = 3;
+}
+
+message IngressReply {
+  bytes json_payload = 1;
+}
+
+service GatewayIngress {
+  rpc Call(IngressRequest) returns (IngressReply);
+}

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package gateway.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1";
+
+// WebSocket 业务路由（运维维护）。
+// Etcd 键示例：kd48/meta/gateway-routes/{route_id}
+// 值：本 message 经 protojson 序列化后的 UTF-8 JSON。
+
+message GatewayRouteSpec {
+  int32 schema_version = 1; // 当前规范为 1
+  // 须与 Etcd key 中 {route_id} 一致
+  string route_id = 2;
+  // 与客户端 WS 信封 `method` 全字匹配（v0.1）
+  string ws_method = 3;
+  // 引用 ServiceTypeSpec.type_key（须已存在且 v0.1 下为 STATELESS_LB）
+  string service_type = 4;
+  // 传入 GatewayIngress.Call 的 route 字段
+  string ingress_route = 5;
+  // true：免鉴权；false：须已认证（替代 handler 内后缀硬编码）
+  bool public = 6;
+  // 可选，便于运维展示
+  string display_name = 7;
+  // 成功响应后网关将连接标为已认证（如 Login / Register）
+  bool establishes_session = 8;
+}

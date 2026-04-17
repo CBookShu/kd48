@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // clientMeta 维护单个 WebSocket 连接的网关级状态
@@ -29,13 +27,12 @@ type clientMeta struct {
 // Handler 网关 WebSocket 处理器
 type Handler struct {
 	tracer      trace.Tracer
-	router      *WsRouter // 注入动态路由表
-	clients     sync.Map  // map[connID]*clientMeta
+	router      *AtomicRouter // Etcd 驱动的不可变路由快照
+	clients     sync.Map      // map[connID]*clientMeta
 	connCounter atomic.Uint64
 }
 
-// 修改点：构造函数不再依赖具体的 userClient，而是依赖通用的 router
-func NewHandler(tracer trace.Tracer, router *WsRouter) *Handler {
+func NewHandler(tracer trace.Tracer, router *AtomicRouter) *Handler {
 	return &Handler{
 		tracer: tracer,
 		router: router,
@@ -96,30 +93,22 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 
 		slog.InfoContext(ctx, "Received WS message", "method", req.Method, "payload", req.Payload)
 
-		// 2. 🚨 网关级未认证拦截守卫 (基于方法名后缀白名单，彻底解耦业务 proto)
-		allowList := []string{"/Login", "/Register"} // 放行后缀
-		isAuthRoute := false
-		for _, suffix := range allowList {
-			if strings.HasSuffix(req.Method, suffix) {
-				isAuthRoute = true
-				break
-			}
-		}
-		if !isAuthRoute && !meta.isAuthenticated {
-			slog.WarnContext(ctx, "Unauthenticated client blocked by gateway", "attempted_method", req.Method)
-			h.sendResp(ctx, conn, req.Method, int32(codes.Unauthenticated), "unauthorized: please login first", nil)
-			break
-		}
-
-		// 3. 🚨 动态路由查找
-		handler, ok := h.router.GetHandler(req.Method)
+		// 2. 路由快照：先解析 Etcd 路由（§11.9：无路由则 unknown）
+		route, ok := h.router.Get(req.Method)
 		if !ok {
 			h.sendResp(ctx, conn, req.Method, int32(codes.NotFound), "unknown method", nil)
 			break
 		}
 
-		// 4. 执行业务逻辑 (由 WrapUnary 包装的泛型函数处理)
-		resp, err := handler(ctx, []byte(req.Payload), meta)
+		// 3. 鉴权：非 public 且未登录则拒绝
+		if !route.Public && !meta.isAuthenticated {
+			slog.WarnContext(ctx, "Unauthenticated client blocked by gateway", "attempted_method", req.Method)
+			h.sendResp(ctx, conn, req.Method, int32(codes.Unauthenticated), "unauthorized: please login first", nil)
+			break
+		}
+
+		// 4. 执行业务逻辑
+		resp, err := route.Handler(ctx, []byte(req.Payload), meta)
 		if err != nil {
 			// 5. 统一错误透传拦截
 			sts, ok := status.FromError(err)
@@ -129,23 +118,24 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 				// protojson 解析错误或其他底层灾难
 				h.sendResp(ctx, conn, req.Method, int32(codes.Internal), err.Error(), nil)
 			}
-			// 登录/注册失败（业务错误），直接踢
-			if isAuthRoute {
+			if route.EstablishSession {
 				break
 			}
 			continue
 		}
 
-		if isAuthRoute {
+		if route.EstablishSession {
 			meta.isAuthenticated = true
 		}
 
-		// 6. 成功响应：Proto 转 标准 JSON Map (防止前端拿到 proto 的特殊字段如 @type)
-		var data interface{}
-		if resp != nil {
-			marshaler := protojson.MarshalOptions{EmitUnpopulated: true}
-			jsonBytes, _ := marshaler.Marshal(resp)
-			json.Unmarshal(jsonBytes, &data)
+		// 6. 成功响应：与 response_data.go 单测对齐的转换逻辑
+		data, convErr := DataFromWsHandlerResult(resp)
+		if convErr != nil {
+			h.sendResp(ctx, conn, req.Method, int32(codes.Internal), convErr.Error(), nil)
+			if route.EstablishSession {
+				break
+			}
+			continue
 		}
 
 		h.sendResp(ctx, conn, req.Method, int32(codes.OK), "success", data)

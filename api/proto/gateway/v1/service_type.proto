@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package gateway.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1";
+
+// 逻辑服务类型（运维维护）的规范描述。
+// Etcd 键示例：kd48/meta/service-types/{type_key}
+// 值：本 message 经 protojson 序列化后的 UTF-8 JSON（仍为人可读、可 etcdctl 编辑）。
+
+// 路由语义；网关实现可分期启用。
+enum ServiceRoutingMode {
+  SERVICE_ROUTING_MODE_UNSPECIFIED = 0;
+  // 无状态：统一前缀 + 多实例 LB（当前网关 v0.1 仅接受本枚举值）
+  SERVICE_ROUTING_MODE_STATELESS_LB = 1;
+  // 以下预留，勿在 v0.1 网关加载逻辑中启用（见设计文档 §9）
+  // SERVICE_ROUTING_MODE_STATEFUL_DIRECT = 2;
+  // SERVICE_ROUTING_MODE_STATEFUL_SHARD = 3;
+}
+
+// 与 gRPC 发现 target 对应（通常指向实例注册所用 Etcd 前缀）。
+message ServiceTypeDiscovery {
+  // 例：etcd:///kd48/user-service
+  string grpc_etcd_target = 1;
+  // 可选；与 grpc.WithDefaultServiceConfig 对齐，默认 round_robin
+  string load_balancing = 2;
+}
+
+message ServiceTypeIngress {
+  bool use_gateway_ingress = 1;
+}
+
+message ServiceTypeSpec {
+  int32 schema_version = 1; // 当前规范为 1
+  // 须与 Etcd key 中 {type_key} 一致
+  string type_key = 2;
+  string display_name = 3;
+  ServiceRoutingMode routing_mode = 4;
+  ServiceTypeDiscovery discovery = 5;
+  ServiceTypeIngress ingress = 6;
+  int64 updated_at_unix = 7;
+}

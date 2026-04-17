@@ -1,0 +1,18 @@
+---
+description: kd48 强制 superpowers 门闩（设计批准、计划批准、TDD、subagent、验证）
+alwaysApply: true
+---
+
+# kd48：Superpowers 工作流（始终生效）
+
+执行 **任何** 实现或行为变更前，打开并遵守仓库根目录 **`AGENTS.md`**。
+
+**硬性摘要（不可省略细节时读 AGENTS.md 全文）：**
+
+1. **设计/讨论阶段**：用户未批准前 **不写实现**；设计落盘须 **「可以落盘」** 等许可。
+2. **实现计划**：须有 `docs/superpowers/plans/*.md`；**须用户明确批准计划** 后才可写生产代码。
+3. **TDD**：该流程不能省略
+4. **多 Task 计划**：默认 **subagent-driven-development**（一 Task 一 agent + 审查）；不得无故单会话吞全计划。
+5. **完成声称前**：运行 `go test ./...` / 约定构建并核对输出。
+
+若用户当轮指令与 `AGENTS.md` 冲突，**先说明冲突并让用户选择**，不得静默忽略。
