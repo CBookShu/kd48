@@ -15,6 +15,7 @@ import (
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
@@ -41,23 +42,61 @@ func main() {
 	}
 	defer shutdown(context.Background())
 
-	db, err := sql.Open("mysql", c.MySQL.DSN)
-	if err != nil {
-		panic(fmt.Errorf("failed to open mysql: %w", err))
-	}
-	defer db.Close()
+	dsCfg := c.GetDataSourcesOrSynthesize().ToDSRouteConfig()
 
-	// 2. 显式初始化 Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     c.Redis.Addr,
-		Password: c.Redis.Password,
-		DB:       c.Redis.DB,
-	})
-	defer rdb.Close()
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		panic(fmt.Errorf("failed to ping redis: %w", err))
+	mysqlPools := make(map[string]*sql.DB)
+	for name, spec := range dsCfg.MySQLPools {
+		db, err := sql.Open("mysql", spec.DSN)
+		if err != nil {
+			panic(fmt.Errorf("failed to open mysql pool %q: %w", name, err))
+		}
+		if spec.MaxOpen > 0 {
+			db.SetMaxOpenConns(spec.MaxOpen)
+		}
+		if spec.MaxIdle > 0 {
+			db.SetMaxIdleConns(spec.MaxIdle)
+		}
+		mysqlPools[name] = db
 	}
-	slog.Info("Redis connected successfully")
+	defer func() {
+		for _, db := range mysqlPools {
+			db.Close()
+		}
+	}()
+
+	redisPools := make(map[string]redis.UniversalClient)
+	for name, spec := range dsCfg.RedisPools {
+		rdb := redis.NewClient(&redis.Options{
+			Addr:     spec.Addr,
+			Password: spec.Password,
+			DB:       spec.DB,
+			PoolSize: spec.PoolSize,
+		})
+		if err := rdb.Ping(context.Background()).Err(); err != nil {
+			panic(fmt.Errorf("failed to ping redis pool %q: %w", name, err))
+		}
+		redisPools[name] = rdb
+		slog.Info("Redis pool connected", "name", name, "addr", spec.Addr)
+	}
+	defer func() {
+		for _, rdb := range redisPools {
+			rdb.Close()
+		}
+	}()
+
+	mysqlRoutes := make([]dsroute.RouteRule, len(dsCfg.MySQLRoutes))
+	for i, r := range dsCfg.MySQLRoutes {
+		mysqlRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	}
+	redisRoutes := make([]dsroute.RouteRule, len(dsCfg.RedisRoutes))
+	for i, r := range dsCfg.RedisRoutes {
+		redisRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	}
+
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	if err != nil {
+		panic(fmt.Errorf("failed to create dsroute router: %w", err))
+	}
 
 	// 1. 启动 gRPC Server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.UserService.Port))
@@ -69,8 +108,8 @@ func main() {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 
-	queries := sqlc.New(db)
-	userSvc := NewUserService(queries, rdb, time.Duration(c.Session.ExpireHours)*time.Hour)
+	queries := sqlc.New(mysqlPools["default"])
+	userSvc := NewUserService(queries, router, time.Duration(c.Session.ExpireHours)*time.Hour)
 	userv1.RegisterUserServiceServer(s, userSvc)
 	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc))
 

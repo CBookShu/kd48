@@ -12,29 +12,30 @@ import (
 	"time"
 
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
 	"github.com/go-sql-driver/mysql"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// userService 实现 proto 定义的接口
 type userService struct {
 	userv1.UnimplementedUserServiceServer
 	qc       *sqlc.Queries
-	rdb      *redis.Client
+	router   *dsroute.Router
 	tokenTTL time.Duration
 }
 
-func NewUserService(queries *sqlc.Queries, rdb *redis.Client, tokenTTL time.Duration) *userService {
+func NewUserService(queries *sqlc.Queries, router *dsroute.Router, tokenTTL time.Duration) *userService {
 	return &userService{
 		qc:       queries,
-		rdb:      rdb,
+		router:   router,
 		tokenTTL: tokenTTL,
 	}
 }
+
+const routingKeySession = "session"
 
 func (s *userService) issueSession(ctx context.Context, userID uint64, username string) (string, error) {
 	tokenBytes := make([]byte, 32)
@@ -46,7 +47,13 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 	sessionKey := fmt.Sprintf("user:session:%s", token)
 	sessionValue := fmt.Sprintf("%d:%s", userID, username)
 
-	if err := s.rdb.Set(ctx, sessionKey, sessionValue, s.tokenTTL).Err(); err != nil {
+	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to resolve redis for session", "error", err)
+		return "", status.Error(codes.Internal, "internal server error")
+	}
+
+	if err := rdb.Set(ctx, sessionKey, sessionValue, s.tokenTTL).Err(); err != nil {
 		slog.ErrorContext(ctx, "Failed to save session to Redis", "error", err)
 		return "", status.Error(codes.Internal, "internal server error")
 	}
