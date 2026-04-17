@@ -50,12 +50,29 @@ func main() {
 		if err != nil {
 			panic(fmt.Errorf("failed to open mysql pool %q: %w", name, err))
 		}
+
+		// 设置连接池参数
 		if spec.MaxOpen > 0 {
 			db.SetMaxOpenConns(spec.MaxOpen)
 		}
 		if spec.MaxIdle > 0 {
 			db.SetMaxIdleConns(spec.MaxIdle)
 		}
+		if spec.ConnMaxLifetime > 0 {
+			db.SetConnMaxLifetime(spec.ConnMaxLifetime)
+		}
+		if spec.ConnMaxIdleTime > 0 {
+			db.SetConnMaxIdleTime(spec.ConnMaxIdleTime)
+		}
+
+		// 连接健康检查
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := db.PingContext(ctx); err != nil {
+			cancel()
+			panic(fmt.Errorf("failed to ping mysql pool %q: %w", name, err))
+		}
+		cancel()
+
 		mysqlPools[name] = db
 	}
 	defer func() {
@@ -66,15 +83,29 @@ func main() {
 
 	redisPools := make(map[string]redis.UniversalClient)
 	for name, spec := range dsCfg.RedisPools {
-		rdb := redis.NewClient(&redis.Options{
-			Addr:     spec.Addr,
-			Password: spec.Password,
-			DB:       spec.DB,
-			PoolSize: spec.PoolSize,
-		})
+		opts := &redis.Options{
+			Addr:         spec.Addr,
+			Password:     spec.Password,
+			DB:           spec.DB,
+			PoolSize:     spec.PoolSize,
+			MinIdleConns: spec.MinIdleConns,
+		}
+		if spec.DialTimeout > 0 {
+			opts.DialTimeout = spec.DialTimeout
+		}
+		if spec.ReadTimeout > 0 {
+			opts.ReadTimeout = spec.ReadTimeout
+		}
+		if spec.WriteTimeout > 0 {
+			opts.WriteTimeout = spec.WriteTimeout
+		}
+
+		rdb := redis.NewClient(opts)
+
 		if err := rdb.Ping(context.Background()).Err(); err != nil {
 			panic(fmt.Errorf("failed to ping redis pool %q: %w", name, err))
 		}
+
 		redisPools[name] = rdb
 		slog.Info("Redis pool connected", "name", name, "addr", spec.Addr)
 	}
@@ -84,19 +115,40 @@ func main() {
 		}
 	}()
 
-	mysqlRoutes := make([]dsroute.RouteRule, len(dsCfg.MySQLRoutes))
-	for i, r := range dsCfg.MySQLRoutes {
-		mysqlRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	// 创建 etcd 客户端（用于路由加载和服务注册）
+	etcdCli, err := registry.NewClient(c.Etcd)
+	if err != nil {
+		panic(err)
 	}
-	redisRoutes := make([]dsroute.RouteRule, len(dsCfg.RedisRoutes))
-	for i, r := range dsCfg.RedisRoutes {
-		redisRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	defer etcdCli.Close()
+
+	// 从 etcd 加载路由配置
+	routeLoader := dsroute.NewRouteLoader(etcdCli, "kd48/routing")
+	routingCfg, err := routeLoader.Get(context.Background())
+	if err != nil {
+		slog.Error("failed to load routing config from etcd", "error", err)
+		os.Exit(1)
 	}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	// 创建 Router
+	router, err := dsroute.NewRouter(
+		mysqlPools,
+		redisPools,
+		routingCfg.MySQLRoutes,
+		routingCfg.RedisRoutes,
+	)
 	if err != nil {
-		panic(fmt.Errorf("failed to create dsroute router: %w", err))
+		panic(fmt.Errorf("failed to create router: %w", err))
 	}
+
+	// 启动路由配置监听
+	go func() {
+		if err := routeLoader.Watch(context.Background(), func(cfg *dsroute.RoutingConfig) {
+			router.UpdateRoutes(cfg.MySQLRoutes, cfg.RedisRoutes)
+		}); err != nil {
+			slog.Error("route watcher stopped", "error", err)
+		}
+	}()
 
 	// 1. 启动 gRPC Server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.UserService.Port))
@@ -121,12 +173,6 @@ func main() {
 	}()
 
 	// 2. 注册到 Etcd
-	etcdCli, err := registry.NewClient(c.Etcd)
-	if err != nil {
-		panic(err)
-	}
-	defer etcdCli.Close()
-
 	// 获取本机 IP (本地开发直接写 localhost)
 	localAddr := fmt.Sprintf("localhost:%d", c.UserService.Port)
 	serviceName := "kd48/user-service"
