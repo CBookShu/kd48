@@ -10,6 +10,12 @@ gateway:
 user_service:
   port: 9000
 
+lobby_service:
+  port: 9001
+  # 服务注册到 etcd 的地址，留空则自动检测本机 IP
+  # 在容器/K8s 环境中，建议设置为 Pod IP 或 Service 名称
+  # advertise_addr: "192.168.1.100"
+
 log:
   level: "debug" # debug, info, warn, error
   file_path: "./logs" 

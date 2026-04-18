@@ -9,15 +9,16 @@ import (
 
 // Config 全局配置结构体，后续所有的配置项都在这里扩展
 type Config struct {
-	Server      ServerConf       `mapstructure:"server"`
-	Gateway     GatewayConf      `mapstructure:"gateway"`
-	UserService UserServiceConf  `mapstructure:"user_service"`
-	Log         LogConf          `mapstructure:"log"`
-	Redis       RedisConf        `mapstructure:"redis"`
-	Etcd        EtcdConf         `mapstructure:"etcd"`
-	MySQL       MysqlConf        `mapstructure:"mysql"`
-	Session     SessionConf      `mapstructure:"session"`
-	DataSources *DataSourcesConf `mapstructure:"data_sources"`
+	Server       ServerConf       `mapstructure:"server"`
+	Gateway      GatewayConf      `mapstructure:"gateway"`
+	UserService  UserServiceConf  `mapstructure:"user_service"`
+	LobbyService LobbyServiceConf `mapstructure:"lobby_service"`
+	Log          LogConf          `mapstructure:"log"`
+	Redis        RedisConf        `mapstructure:"redis"`
+	Etcd         EtcdConf         `mapstructure:"etcd"`
+	MySQL        MysqlConf        `mapstructure:"mysql"`
+	Session      SessionConf      `mapstructure:"session"`
+	DataSources  *DataSourcesConf `mapstructure:"data_sources"`
 }
 
 type ServerConf struct {
@@ -33,6 +34,11 @@ type GatewayConf struct {
 
 type UserServiceConf struct {
 	Port int `mapstructure:"port"`
+}
+
+type LobbyServiceConf struct {
+	Port            int    `mapstructure:"port"`
+	AdvertiseAddr   string `mapstructure:"advertise_addr"`
 }
 
 // 🚨 修改点：增加 FilePath 字段

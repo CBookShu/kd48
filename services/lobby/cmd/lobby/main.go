@@ -24,6 +24,22 @@ import (
 	"google.golang.org/grpc"
 )
 
+// getLocalIP 返回本机非回环 IPv4 地址
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
+}
+
 func main() {
 	c, err := conf.Load("./config.yaml")
 	if err != nil {
@@ -122,11 +138,10 @@ func main() {
 	defer etcdCli.Close()
 
 	// 启动 gRPC Server
-	// Lobby 服务端口默认使用 9001 (User 服务使用 9000)
-	port := 9001
-	if c.UserService.Port != 0 && c.UserService.Port != 9000 {
-		// 如果配置中有其他服务的端口参考，可以根据实际情况调整
-		port = c.UserService.Port + 1
+	// 从配置读取端口，默认 9001
+	port := c.LobbyService.Port
+	if port == 0 {
+		port = 9001
 	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -150,7 +165,16 @@ func main() {
 	}()
 
 	// 注册到 Etcd
-	localAddr := fmt.Sprintf("localhost:%d", port)
+	// 使用配置的 AdvertiseAddr，默认为自动检测的本机 IP
+	advertiseAddr := c.LobbyService.AdvertiseAddr
+	if advertiseAddr == "" {
+		// 尝试获取本机非回环 IP
+		advertiseAddr = getLocalIP()
+		if advertiseAddr == "" {
+			advertiseAddr = "localhost"
+		}
+	}
+	localAddr := fmt.Sprintf("%s:%d", advertiseAddr, port)
 	serviceName := "kd48/lobby-service"
 
 	if err := registry.RegisterService(etcdCli, serviceName, localAddr); err != nil {
