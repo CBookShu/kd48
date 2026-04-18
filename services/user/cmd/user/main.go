@@ -19,7 +19,6 @@ import (
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
-	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -160,8 +159,7 @@ func main() {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 
-	queries := sqlc.New(mysqlPools["default"])
-	userSvc := NewUserService(queries, router, time.Duration(c.Session.ExpireHours)*time.Hour)
+	userSvc := NewUserService(router, time.Duration(c.Session.ExpireHours)*time.Hour)
 	userv1.RegisterUserServiceServer(s, userSvc)
 	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc))
 
