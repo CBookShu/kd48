@@ -1,10 +1,49 @@
 # kd48 TODO
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-19
 
 ---
 
 ## 已完成
+
+### Lobby 服务核心骨架 (2026-04-19)
+
+- [x] Task 1: lobby.v1 Proto 与代码生成（Ping RPC）
+- [x] Task 2: MySQL 迁移（lobby_config_revision 表）
+- [x] Task 3: 服务骨架（main.go、server.go、ingress.go）
+- [x] gRPC 服务注册到 etcd（kd48/lobby-service）
+- [x] GatewayIngress 分发实现
+- [x] bufconn 单元测试
+- [x] go.work 集成
+
+**相关文档**:
+- `docs/superpowers/specs/2026-04-15-lobby-service-design.md`
+- `docs/superpowers/plans/2026-04-15-lobby-service-implementation-plan.md`
+
+**验证命令**:
+```bash
+go test ./services/lobby/... -v
+go build ./services/lobby/...
+```
+
+---
+
+## 已完成
+
+### 网关 Etcd 元数据与 Watch 热更新 (2026-04-13 ~ 2026-04-18)
+
+- [x] `GatewayRouteSpec.establishes_session` 字段
+- [x] `AtomicRouter` 无锁路由快照
+- [x] Bootstrap：Range + 校验 + gRPC Dial 池（物理空 key 时 fail-fast）
+- [x] Watch：`kd48/meta/` 前缀监听 + debounce 全量重建
+- [x] draining：旧连接延迟 30s 后 Close
+- [x] Handler：`public` 鉴权白名单 + `establishes_session` 会话标记
+- [x] seed-gateway-meta 工具
+- [x] 单元测试覆盖
+
+**相关文档**:
+- `docs/superpowers/specs/2026-04-13-gateway-backend-connection-design.md`（§11）
+- `docs/superpowers/plans/2026-04-13-gateway-etcd-meta-implementation-plan.md`
 
 ### AI PR Review 工具切换 (2026-04-18)
 
@@ -55,9 +94,9 @@
 | 计划文档 | 状态 | 说明 |
 |----------|------|------|
 | `2026-04-18-datasource-routing-implementation-plan.md` | 部分 | dsroute 核心已实现，但规格文档中的多数据源配置可能未完全接入 |
-| `2026-04-15-lobby-service-implementation-plan.md` | 待执行 | 大厅服务 |
-| `2026-04-13-gateway-ingress-implementation-plan.md` | 待确认 | 网关 Ingress |
-| `2026-04-13-gateway-etcd-meta-implementation-plan.md` | 待确认 | 网关 Etcd 元数据 |
+| `2026-04-15-lobby-service-implementation-plan.md` | 部分完成 | Task 1-3 已完成（核心骨架），Task 4-6 待执行 |
+| `2026-04-13-gateway-ingress-implementation-plan.md` | 已完成 | 网关 Ingress（含 `GatewayIngress`） |
+| `2026-04-13-gateway-etcd-meta-implementation-plan.md` | 已完成 | 网关 Etcd 元数据（含 Watch 热更新、Bootstrap、draining） |
 
 ### 规格文档待实现
 
@@ -76,7 +115,7 @@
 | 阶段 | 产品叙事 | 技术交付 | 状态 |
 |------|----------|----------|------|
 | **M0** | 统一入口、账号与会话、可观测、本地可跑 | 网关 WS、gRPC、User、Etcd、MySQL、Redis、OTel | ✅ 基本完成 |
-| **M1** | 架子可扩、协作不断档 | compose/README、第二服务接入套路、最小 CI | 待开始 |
+| **M1** | 架子可扩、协作不断档 | compose/README、第二服务接入套路、最小 CI | ✅ 已完成（Lobby 骨架验证第二服务接入套路） |
 | **M2** | 大厅可用 | 大厅无状态服务 + DB/缓存；染色/AB/打表最小可用 | 待开始 |
 | **M3** | 房间：归属、匹配、开桌前退房与重连 | 房间有状态服务池 | 待开始 |
 | **M4** | 游戏内对局 | 有状态游戏/回合服务 | 待开始 |
