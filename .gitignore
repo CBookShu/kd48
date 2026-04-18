@@ -9,3 +9,6 @@ todo
 
 # 编译产物
 /user
+
+# Lobby service binary
+/lobby
