@@ -1,9 +1,10 @@
 name: AI Review
 
 on:
-  pull_request:
-    branches: [main, master]
+  pull_request_target:
     types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -11,96 +12,23 @@ permissions:
   issues: write
 
 jobs:
-  ai-review:
+  review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Get PR diff
-        id: diff
+      - name: Check required secrets
         run: |
-          git fetch origin ${{ github.base_ref }}
-          git diff origin/${{ github.base_ref }}...HEAD > pr.diff
-          echo "diff_length=$(wc -l < pr.diff)" >> $GITHUB_OUTPUT
-      
-      - name: AI Code Review
-        if: steps.diff.outputs.diff_length != '0'
-        id: ai
-        env:
-          AI_API_URL: ${{ secrets.AI_API_URL }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_MODEL: ${{ secrets.AI_MODEL }}
-        run: |
-          DIFF_CONTENT=$(cat pr.diff | head -c 30000)
-          
-          PROMPT="请审查以下代码变更，从以下角度分析：
-          1. 代码质量和风格
-          2. 潜在的 bug 或安全问题
-          3. 性能问题
-          4. 可读性和可维护性
-          
-          请用中文回复，格式如下：
-          ## 代码质量
-          - ✅ 或 ❌ 评价
-          
-          ## 潜在问题
-          1. 文件:行号 - 问题描述
-          
-          ## 建议
-          - 改进建议
-          
-          代码变更：
-          \`\`\`diff
-          ${DIFF_CONTENT}
-          \`\`\`"
-          
-          RESPONSE=$(curl -s -X POST "${AI_API_URL}/chat/completions" \
-            -H "Authorization: Bearer ${AI_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"${AI_MODEL}\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": \"你是一个专业的代码审查专家，擅长发现代码问题和给出改进建议。\"},
-                {\"role\": \"user\", \"content\": \"${PROMPT}\"}
-              ],
-              \"temperature\": 0.3
-            }")
-          
-          echo "$RESPONSE" | jq -r '.choices[0].message.content' > review_result.md
-          
-          if [ "$(echo "$RESPONSE" | jq -r '.error')" != "null" ]; then
-            echo "AI API Error: $(echo "$RESPONSE" | jq -r '.error.message')"
+          if [ -z "${{ secrets.AI_API_KEY }}" ]; then
+            echo "Error: AI_API_KEY secret is not configured"
             exit 1
           fi
-      
-      - name: Comment on PR
-        if: steps.diff.outputs.diff_length != '0'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const review = fs.readFileSync('review_result.md', 'utf8');
-            
-            const body = `## 🤖 AI 代码审查
-            
-            ${review}
-            
-            ---
-            
-            > **注意**: AI 审查仅供参考，请结合实际情况判断。
-            > 如有问题，请人工确认后点击 Merge 按钮。`;
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
-      
-      - name: Review Summary
-        if: steps.diff.outputs.diff_length == '0'
-        run: |
-          echo "No diff found, skipping AI review"
+          if [ -z "${{ secrets.AI_API_URL }}" ]; then
+            echo "Error: AI_API_URL secret is not configured"
+            exit 1
+          fi
+      - uses: presubmit/ai-reviewer@c8604503f68ef36ac0fcfec558140a149ab1b225
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.AI_API_KEY }}
+          LLM_MODEL: ${{ secrets.AI_MODEL }}
+          LLM_PROVIDER: "ai-sdk"
+          LLM_BASE_URL: ${{ secrets.AI_API_URL }}
