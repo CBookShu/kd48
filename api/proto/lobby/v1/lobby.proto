@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package lobby.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1";
+
+// 大厅服务定义
+service LobbyService {
+  // 健康检查/心跳接口
+  rpc Ping(PingRequest) returns (PingReply);
+}
+
+message PingRequest {
+  optional string client_hint = 1;
+}
+
+message PingReply {
+  string pong = 1;
+  int64 config_revision = 2;
+}
