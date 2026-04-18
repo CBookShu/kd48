@@ -22,20 +22,26 @@ import (
 
 type userService struct {
 	userv1.UnimplementedUserServiceServer
-	qc       *sqlc.Queries
 	router   *dsroute.Router
 	tokenTTL time.Duration
 }
 
-func NewUserService(queries *sqlc.Queries, router *dsroute.Router, tokenTTL time.Duration) *userService {
+func NewUserService(router *dsroute.Router, tokenTTL time.Duration) *userService {
 	return &userService{
-		qc:       queries,
 		router:   router,
 		tokenTTL: tokenTTL,
 	}
 }
 
-const routingKeySession = "session"
+const routingKeySession = "sys:session"
+
+func (s *userService) getQueries(ctx context.Context, routingKey string) (*sqlc.Queries, error) {
+	db, _, err := s.router.ResolveDB(ctx, routingKey)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "resolve db route: %v", err)
+	}
+	return sqlc.New(db), nil
+}
 
 func (s *userService) issueSession(ctx context.Context, userID uint64, username string) (string, error) {
 	tokenBytes := make([]byte, 32)
@@ -63,7 +69,14 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
 	slog.InfoContext(ctx, "Received Login request", "username", req.Username)
 
-	user, err := s.qc.GetUserByUsername(ctx, req.Username)
+	routingKey := "sys:user:" + req.Username
+
+	queries, err := s.getQueries(ctx, routingKey)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := queries.GetUserByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.Unauthenticated, "invalid username or password")
@@ -97,13 +110,20 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 		return nil, status.Error(codes.InvalidArgument, "username and password required")
 	}
 
+	routingKey := "sys:user:" + username
+
+	queries, err := s.getQueries(ctx, routingKey)
+	if err != nil {
+		return nil, err
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		slog.ErrorContext(ctx, "bcrypt hash failed", "error", err)
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 
-	err = s.qc.CreateUser(ctx, sqlc.CreateUserParams{
+	err = queries.CreateUser(ctx, sqlc.CreateUserParams{
 		Username:     username,
 		PasswordHash: string(hash),
 	})
@@ -116,7 +136,7 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 
-	user, err := s.qc.GetUserByUsername(ctx, username)
+	user, err := queries.GetUserByUsername(ctx, username)
 	if err != nil {
 		slog.ErrorContext(ctx, "GetUserByUsername after register failed", "error", err)
 		return nil, status.Error(codes.Internal, "internal server error")

@@ -1,0 +1,22 @@
+syntax = "proto3";
+package dsroute.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/dsroute/v1";
+
+// 单条路由规则
+message RouteRule {
+  // 路由前缀，空字符串表示默认匹配
+  string prefix = 1;
+  // 目标连接池名称
+  string pool   = 2;
+}
+
+// MySQL 路由配置
+message MySQLRoutes {
+  repeated RouteRule rules = 1;
+}
+
+// Redis 路由配置
+message RedisRoutes {
+  repeated RouteRule rules = 1;
+}
