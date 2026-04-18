@@ -6,6 +6,18 @@
 
 ## 已完成
 
+### AI PR Review 工具切换 (2026-04-18)
+
+- [x] 切换到 `presubmit/ai-reviewer` action
+- [x] 复用现有 secrets: `AI_API_KEY`, `AI_API_URL`, `AI_MODEL`
+- [x] Pin action 到 SHA (`c8604503`) 防供应链攻击
+- [x] 添加 `AI_API_URL` 验证
+- [x] 支持 `reopened` 事件触发
+- [x] 创建 PR: https://github.com/CBookShu/kd48/pull/XX
+
+**相关文件**:
+- `.github/workflows/ai-review.yml`
+
 ### dbpool 增强 (2026-04-17 ~ 2026-04-18)
 
 - [x] Protobuf 定义 (`api/proto/dsroute/v1/routing.proto`)
@@ -36,8 +48,7 @@
 
 ### 高优先级
 
-- [ ] **推送文档到远程** - `git push origin dbpool` (Commit: e47bc4b)
-- [ ] **创建 PR** - https://github.com/CBookShu/kd48/pull/new/dbpool
+(无)
 
 ### 未完成的实现计划
 
@@ -75,5 +86,4 @@
 
 ## 杂项
 
-- [ ] 提交 `AGENTS.md` 修改 (添加了开发命令速查和项目结构)
-- [ ] 将 `user` 编译产物加入 `.gitignore`
+(无)
