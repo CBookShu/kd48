@@ -6,3 +6,6 @@ bin/
 logs/
 *.bin
 todo
+
+# 编译产物
+/user

@@ -4,6 +4,28 @@
 
 ---
 
+## 开发命令速查
+
+- **启动中间件**: `docker compose up -d`（Etcd:2379, MySQL:3306, Redis:6379）
+- **配置**: `cp config.yaml gateway/config.yaml && cp config.yaml services/user/config.yaml`
+- **日志目录**: `mkdir -p logs`
+- **迁移**: `cd services/user && migrate -path ./migrations -database "mysql://root:root@tcp(localhost:3306)/kd48?parseTime=true&loc=Local" up`
+- **测试**: `go test ./...`（根目录 go.work）
+- **单测**: `go test ./gateway/internal/ws/... -v`
+- **构建**: `go build ./...`
+- **运行**: `go run ./gateway/cmd/gateway` / `go run ./services/user/cmd/user`
+- **WS 入口**: `ws://localhost:8080/ws`
+
+---
+
+## 项目结构
+
+- **Modules**: api/proto | gateway | pkg | services/user（go.work）
+- **Go**: 1.26.1（见 go.work）
+- **入口**: gateway/:8080, user 服务/:9000
+
+---
+
 ## 1. 讨论与设计阶段（brainstorming HARD GATE）
 
 - 当用户表示 **仍在讨论方案、收敛设计、不写实现** 时：**禁止** 修改业务代码、配置、proto、生成脚本；**仅** 允许更新 **`docs/superpowers/specs/`** 等设计文档，且须在对话中征得 **「可以落盘」** 类明确许可后再改文档。
