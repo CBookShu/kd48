@@ -25,3 +25,15 @@ message GatewayRouteSpec {
   // 成功响应后网关将连接标为已认证（如 Login / Register）
   bool establishes_session = 8;
 }
+
+// 心跳检测协议
+message HeartbeatRequest {
+  int64 timestamp = 1;
+  string client_id = 2;
+}
+
+message HeartbeatResponse {
+  int64 timestamp = 1;
+  int64 server_time = 2;
+  bool healthy = 3;
+}
