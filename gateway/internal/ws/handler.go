@@ -82,15 +82,6 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 	var msg []byte
 	var err error
 
-	// 设置 Pong 处理器（当服务器向客户端发送 Ping 后收到响应时调用）
-	// 这表示客户端成功收到了服务器的 Ping 并回复了 Pong，连接活跃
-	if h.connManager != nil {
-		conn.SetPongHandler(func(appData string) error {
-			h.connManager.RecordPong(clientID)
-			return nil
-		})
-	}
-
 	for {
 		if meta.isAuthenticated {
 			conn.SetReadDeadline(time.Time{})
@@ -104,19 +95,17 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 		}
 
 		// 处理 Ping 消息（客户端主动发送的 Ping）
-		// 表示客户端仍然在线，记录最后活跃时间
+		// RFC 6455: 服务端收到 Ping 必须回复 Pong
 		if msgType == websocket.PingMessage {
-			if h.connManager != nil {
-				h.connManager.RecordPing(clientID)
+			// 回复 Pong（协议强制要求）
+			if err := conn.WriteControl(websocket.PongMessage, []byte{},
+				time.Now().Add(1*time.Second)); err != nil {
+				slog.ErrorContext(ctx, "Failed to send Pong", "error", err, "client_id", clientID)
 			}
-			continue
-		}
 
-		// 处理 Pong 消息（客户端响应服务器发起的 Ping）
-		// 表示客户端收到了服务器的 Ping 并响应
-		if msgType == websocket.PongMessage {
+			// 记录活动时间（用于超时检测）
 			if h.connManager != nil {
-				h.connManager.RecordPong(clientID)
+				h.connManager.RecordActivity(clientID)
 			}
 			continue
 		}
