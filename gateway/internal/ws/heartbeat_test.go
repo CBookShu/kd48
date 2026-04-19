@@ -41,63 +41,63 @@ func TestHeartbeatManager_RecordPing(t *testing.T) {
 func TestHeartbeatManager_CheckTimeout(t *testing.T) {
 	hm := NewHeartbeatManager(HeartbeatConfig{
 		Interval:  1 * time.Second,
-		Timeout:   500 * time.Millisecond,
+		Timeout:   200 * time.Millisecond,
 		MaxMissed: 2,
 	})
 
 	clientID := "test-client-456"
+	// 先创建连接状态（通过 RecordPing，因为 RecordActivity 不会创建新连接）
 	hm.RecordPing(clientID)
-	// 客户端收到服务器的Pong响应后记录lastPong
-	hm.RecordPong(clientID)
 
 	// 等待第一次超时
-	time.Sleep(600 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
-	// 第一次检查：应该增加missedCount，但还不会断开连接
+	// 第一次检查：应该增加 missedCount 到 1，但还不会断开连接
 	shouldDisconnect := hm.CheckTimeout(clientID)
 	if shouldDisconnect {
-		t.Error("should not disconnect after first timeout (MaxMissed=2)")
+		t.Error("should not disconnect after first timeout (MaxMissed=2, missedCount=1)")
 	}
 
-	// 再次检查，应该触发第二次超时并断开连接
+	// 验证 missedCount 已经增加
+	state := hm.GetState(clientID)
+	if state == nil {
+		t.Fatal("state should exist")
+	}
+	if state.missedCount != 1 {
+		t.Errorf("expected missedCount=1 after first check, got %d", state.missedCount)
+	}
+
+	// 再次调用 CheckTimeout - 由于时间仍然超过 Timeout，应该再次增加 missedCount
 	shouldDisconnect = hm.CheckTimeout(clientID)
 	if !shouldDisconnect {
-		t.Error("should disconnect after second timeout")
+		t.Errorf("should disconnect after second timeout (missedCount should be 2)")
 	}
 }
 
-func TestHeartbeatManager_RecordPong(t *testing.T) {
+func TestHeartbeatManager_RecordActivity(t *testing.T) {
 	hm := NewHeartbeatManager(HeartbeatConfig{
 		Interval:  30 * time.Second,
 		Timeout:   10 * time.Second,
 		MaxMissed: 3,
 	})
 
-	clientID := "test-client-pong"
-	hm.RecordPing(clientID)
+	clientID := "test-client-activity"
+	// RecordActivity 只更新已存在的状态，需要先创建
+	hm.RecordPing(clientID) // 先创建连接
 
-	// 初始状态：lastPong 为零值
+	// 记录活动
+	hm.RecordActivity(clientID)
+
+	// 验证 lastActivity 已更新
 	state := hm.GetState(clientID)
 	if state == nil {
-		t.Fatal("connection state should exist after ping")
+		t.Fatal("connection state should exist")
 	}
-	if !state.lastPong.IsZero() {
-		t.Error("lastPong should be zero before RecordPong")
+	if state.lastActivity.IsZero() {
+		t.Error("lastActivity should be set after RecordActivity")
 	}
-
-	// 记录 Pong
-	hm.RecordPong(clientID)
-
-	// 验证 lastPong 已更新
-	state = hm.GetState(clientID)
-	if state.lastPong.IsZero() {
-		t.Error("lastPong should be set after RecordPong")
-	}
-	if !state.lastPong.After(time.Now().Add(-1 * time.Second)) {
-		t.Error("lastPong should be recent")
-	}
-	if state.missedCount != 0 {
-		t.Error("missedCount should be reset after RecordPong")
+	if !state.lastActivity.After(time.Now().Add(-1 * time.Second)) {
+		t.Error("lastActivity should be recent")
 	}
 }
 
