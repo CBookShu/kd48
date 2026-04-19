@@ -1,6 +1,27 @@
 # kd48 TODO
 
-> 最后更新: 2026-04-19
+> 最后更新: 2026-04-20
+
+---
+
+## 已完成
+
+### WebSocket 心跳机制修复 (2026-04-20)
+
+- [x] 服务端收到 Ping 后回复 Pong（RFC 6455 合规）
+- [x] RecordActivity 记录活动时间用于超时检测
+- [x] 配置参数化（server_timeout: 90s, check_interval: 5s）
+- [x] 单元测试覆盖
+
+**相关文档**:
+- `docs/superpowers/specs/2026-04-20-heartbeat-design.md`
+- `docs/superpowers/plans/2026-04-20-heartbeat-fix-plan.md`
+
+**验证命令**:
+```bash
+go test ./gateway/internal/ws/... -v
+go build ./gateway/...
+```
 
 ---
 
