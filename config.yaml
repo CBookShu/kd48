@@ -10,6 +10,9 @@ gateway:
 user_service:
   port: 9000
 
+lobby_service:
+  port: 9001
+
 log:
   level: "debug" # debug, info, warn, error
   file_path: "./logs" 

@@ -13,9 +13,8 @@ import (
 	"time"
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
-	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
-	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
@@ -31,11 +30,11 @@ func main() {
 		panic(err)
 	}
 
-	logPath := filepath.Join(c.Log.FilePath, "user-service.log")
+	logPath := filepath.Join(c.Log.FilePath, "lobby-service.log")
 	handler := logzap.New(c.Log.Level, logPath)
 	slog.SetDefault(slog.New(handler))
 
-	shutdown, err := otelkit.InitTracer(c.Server.Name + "-user-service")
+	shutdown, err := otelkit.InitTracer(c.Server.Name + "-lobby-service")
 	if err != nil {
 		panic(err)
 	}
@@ -43,6 +42,7 @@ func main() {
 
 	dsCfg := c.GetDataSourcesOrSynthesize().ToDSRouteConfig()
 
+	// 初始化 MySQL 连接
 	mysqlPools := make(map[string]*sql.DB)
 	for name, spec := range dsCfg.MySQLPools {
 		db, err := sql.Open("mysql", spec.DSN)
@@ -50,7 +50,6 @@ func main() {
 			panic(fmt.Errorf("failed to open mysql pool %q: %w", name, err))
 		}
 
-		// 设置连接池参数
 		if spec.MaxOpen > 0 {
 			db.SetMaxOpenConns(spec.MaxOpen)
 		}
@@ -64,7 +63,6 @@ func main() {
 			db.SetConnMaxIdleTime(spec.ConnMaxIdleTime)
 		}
 
-		// 连接健康检查
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := db.PingContext(ctx); err != nil {
 			cancel()
@@ -73,6 +71,7 @@ func main() {
 		cancel()
 
 		mysqlPools[name] = db
+		slog.Info("MySQL pool connected", "name", name)
 	}
 	defer func() {
 		for _, db := range mysqlPools {
@@ -80,6 +79,7 @@ func main() {
 		}
 	}()
 
+	// 初始化 Redis 连接
 	redisPools := make(map[string]redis.UniversalClient)
 	for name, spec := range dsCfg.RedisPools {
 		opts := &redis.Options{
@@ -114,43 +114,21 @@ func main() {
 		}
 	}()
 
-	// 创建 etcd 客户端（用于路由加载和服务注册）
+	// 创建 etcd 客户端
 	etcdCli, err := registry.NewClient(c.Etcd)
 	if err != nil {
 		panic(err)
 	}
 	defer etcdCli.Close()
 
-	// 从 etcd 加载路由配置
-	routeLoader := dsroute.NewRouteLoader(etcdCli, "kd48/routing")
-	routingCfg, err := routeLoader.Get(context.Background())
-	if err != nil {
-		slog.Error("failed to load routing config from etcd", "error", err)
-		os.Exit(1)
+	// 启动 gRPC Server
+	// 从配置读取端口，默认 9001
+	port := c.LobbyService.Port
+	if port == 0 {
+		port = 9001
 	}
 
-	// 创建 Router
-	router, err := dsroute.NewRouter(
-		mysqlPools,
-		redisPools,
-		routingCfg.MySQLRoutes,
-		routingCfg.RedisRoutes,
-	)
-	if err != nil {
-		panic(fmt.Errorf("failed to create router: %w", err))
-	}
-
-	// 启动路由配置监听
-	go func() {
-		if err := routeLoader.Watch(context.Background(), func(cfg *dsroute.RoutingConfig) {
-			router.UpdateRoutes(cfg.MySQLRoutes, cfg.RedisRoutes)
-		}); err != nil {
-			slog.Error("route watcher stopped", "error", err)
-		}
-	}()
-
-	// 1. 启动 gRPC Server
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", c.UserService.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
@@ -159,18 +137,18 @@ func main() {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 
-	userSvc := NewUserService(router, time.Duration(c.Session.ExpireHours)*time.Hour)
-	userv1.RegisterUserServiceServer(s, userSvc)
-	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc))
+	lobbySvc := NewLobbyService(mysqlPools, redisPools)
+	lobbyv1.RegisterLobbyServiceServer(s, lobbySvc)
+	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(lobbySvc))
 
 	go func() {
-		slog.Info("User Service gRPC server listening", "port", c.UserService.Port)
+		slog.Info("Lobby Service gRPC server listening", "port", port)
 		if err := s.Serve(lis); err != nil {
 			panic(err)
 		}
 	}()
 
-	// 2. 注册到 Etcd
+	// 注册到 Etcd
 	// 广播地址从环境变量 ADVERTISE_ADDR 读取
 	// - K8s: 通过 Downward API 注入 POD_IP
 	// - Docker Compose: 使用服务名
@@ -185,18 +163,18 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	localAddr := fmt.Sprintf("%s:%d", advertiseAddr, c.UserService.Port)
-	serviceName := "kd48/user-service"
+	localAddr := fmt.Sprintf("%s:%d", advertiseAddr, port)
+	serviceName := "kd48/lobby-service"
 
 	if err := registry.RegisterService(etcdCli, serviceName, localAddr); err != nil {
 		panic(err)
 	}
-	slog.Info("User Service registered to Etcd", "name", serviceName, "addr", localAddr)
+	slog.Info("Lobby Service registered to Etcd", "name", serviceName, "addr", localAddr)
 
 	// 阻塞等待退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	slog.Info("Shutting down User Service...")
+	slog.Info("Shutting down Lobby Service...")
 	s.GracefulStop()
 }

@@ -4,5 +4,6 @@ use (
 	./api/proto
 	./gateway
 	./pkg
+	./services/lobby
 	./services/user
 )

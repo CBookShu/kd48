@@ -9,4 +9,5 @@ protoc -I api/proto \
 	user/v1/user.proto \
 	gateway/v1/gateway.proto \
 	gateway/v1/service_type.proto \
-	gateway/v1/gateway_route.proto
+	gateway/v1/gateway_route.proto \
+	lobby/v1/lobby.proto
