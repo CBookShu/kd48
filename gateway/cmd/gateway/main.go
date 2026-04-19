@@ -100,7 +100,7 @@ func main() {
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
-	wsHandler := ws.NewHandler(tracer, atomicRT)
+	wsHandler := ws.NewHandler(tracer, atomicRT, connManager)
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,

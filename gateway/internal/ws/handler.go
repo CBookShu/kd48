@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -19,6 +20,7 @@ import (
 type clientMeta struct {
 	connID          uint64
 	conn            *websocket.Conn
+	clientID        string // 客户端唯一标识（用于连接管理）
 	isAuthenticated bool
 	userID          int64  // 预留：后续强踢、消息路由使用
 	token           string // 预留：后续强踢、会话恢复使用
@@ -26,27 +28,37 @@ type clientMeta struct {
 
 // Handler 网关 WebSocket 处理器
 type Handler struct {
-	tracer      trace.Tracer
-	router      *AtomicRouter // Etcd 驱动的不可变路由快照
-	clients     sync.Map      // map[connID]*clientMeta
-	connCounter atomic.Uint64
+	tracer         trace.Tracer
+	router         *AtomicRouter        // Etcd 驱动的不可变路由快照
+	clients        sync.Map              // map[connID]*clientMeta
+	connCounter    atomic.Uint64
+	connManager    *ConnectionManager   // 连接管理器（可选，为nil时不启用连接管理）
 }
 
-func NewHandler(tracer trace.Tracer, router *AtomicRouter) *Handler {
+func NewHandler(tracer trace.Tracer, router *AtomicRouter, connManager *ConnectionManager) *Handler {
 	return &Handler{
-		tracer: tracer,
-		router: router,
+		tracer:      tracer,
+		router:      router,
+		connManager: connManager,
 	}
 }
 
 // ServeWS 处理 WebSocket 循环读写
 func (h *Handler) ServeWS(conn *websocket.Conn) {
 	connID := h.connCounter.Add(1)
+	// 生成客户端唯一标识（使用connID作为临时ID，后续认证后可替换为userID）
+	clientID := fmt.Sprintf("conn-%d", connID)
 	meta := &clientMeta{
-		connID: connID,
-		conn:   conn,
+		connID:   connID,
+		conn:     conn,
+		clientID: clientID,
 	}
 	h.clients.Store(connID, meta)
+
+	// 注册连接到连接管理器（如果启用）
+	if h.connManager != nil {
+		h.connManager.RegisterConnection(clientID, conn)
+	}
 
 	// 【关键】脱离 fasthttp 的 context 复用池，创建长连接独享的 context
 	ctx, span := h.tracer.Start(context.Background(), "WS.Session")
@@ -54,17 +66,31 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 
 	defer func() {
 		h.clients.Delete(connID)
+		// 从连接管理器注销
+		if h.connManager != nil {
+			h.connManager.UnregisterConnection(clientID)
+		}
 		conn.Close()
-		slog.InfoContext(ctx, "WebSocket connection closed and cleaned up", "conn_id", connID)
+		slog.InfoContext(ctx, "WebSocket connection closed and cleaned up", "conn_id", connID, "client_id", clientID)
 	}()
 
-	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP())
+	slog.InfoContext(ctx, "New Fiber WS connection established", "client_ip", conn.IP(), "client_id", clientID)
 
 	handshakeTimeout := 10 * time.Second
 
 	var msgType int
 	var msg []byte
 	var err error
+
+	// 设置 Ping 处理器（如果连接管理器已启用）
+	if h.connManager != nil {
+		conn.SetPingHandler(func(appData string) error {
+			// 收到客户端的 Ping，记录心跳
+			h.connManager.RecordPing(clientID)
+			// 回复 Pong
+			return conn.WriteMessage(websocket.PongMessage, []byte(appData))
+		})
+	}
 
 	for {
 		if meta.isAuthenticated {
@@ -76,6 +102,22 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 		if msgType, msg, err = conn.ReadMessage(); err != nil {
 			slog.ErrorContext(ctx, "WS read error, connection closed", "error", err)
 			break
+		}
+
+		// 处理 Ping/Pong 消息（Fiber WebSocket会自动处理，这里只做记录）
+		if msgType == websocket.PingMessage {
+			if h.connManager != nil {
+				h.connManager.RecordPong(clientID)
+			}
+			continue
+		}
+
+		// 处理 Pong 消息
+		if msgType == websocket.PongMessage {
+			if h.connManager != nil {
+				h.connManager.RecordPong(clientID)
+			}
+			continue
 		}
 
 		if msgType != websocket.TextMessage {
