@@ -24,22 +24,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// getLocalIP 返回本机非回环 IPv4 地址
-func getLocalIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return ""
-}
-
 func main() {
 	c, err := conf.Load("./config.yaml")
 	if err != nil {
@@ -165,13 +149,17 @@ func main() {
 	}()
 
 	// 注册到 Etcd
-	// 使用配置的 AdvertiseAddr，默认为自动检测的本机 IP
+	// 方案 A：纯配置驱动
+	// - 生产环境（env != "dev"）：advertise_addr 必须配置，否则启动失败
+	// - 开发环境（env == "dev"）：允许回退到 localhost
 	advertiseAddr := c.LobbyService.AdvertiseAddr
 	if advertiseAddr == "" {
-		// 尝试获取本机非回环 IP
-		advertiseAddr = getLocalIP()
-		if advertiseAddr == "" {
+		if c.Server.Env == "dev" {
 			advertiseAddr = "localhost"
+			slog.Warn("advertise_addr not configured, falling back to localhost (dev mode)")
+		} else {
+			slog.Error("advertise_addr is required in non-dev environment", "env", c.Server.Env)
+			os.Exit(1)
 		}
 	}
 	localAddr := fmt.Sprintf("%s:%d", advertiseAddr, port)

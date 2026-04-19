@@ -171,8 +171,20 @@ func main() {
 	}()
 
 	// 2. 注册到 Etcd
-	// 获取本机 IP (本地开发直接写 localhost)
-	localAddr := fmt.Sprintf("localhost:%d", c.UserService.Port)
+	// 方案 A：纯配置驱动
+	// - 生产环境（env != "dev"）：advertise_addr 必须配置，否则启动失败
+	// - 开发环境（env == "dev"）：允许回退到 localhost
+	advertiseAddr := c.UserService.AdvertiseAddr
+	if advertiseAddr == "" {
+		if c.Server.Env == "dev" {
+			advertiseAddr = "localhost"
+			slog.Warn("advertise_addr not configured, falling back to localhost (dev mode)")
+		} else {
+			slog.Error("advertise_addr is required in non-dev environment", "env", c.Server.Env)
+			os.Exit(1)
+		}
+	}
+	localAddr := fmt.Sprintf("%s:%d", advertiseAddr, c.UserService.Port)
 	serviceName := "kd48/user-service"
 
 	if err := registry.RegisterService(etcdCli, serviceName, localAddr); err != nil {

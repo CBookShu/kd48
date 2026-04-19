@@ -33,7 +33,8 @@ type GatewayConf struct {
 }
 
 type UserServiceConf struct {
-	Port int `mapstructure:"port"`
+	Port          int    `mapstructure:"port"`
+	AdvertiseAddr string `mapstructure:"advertise_addr"`
 }
 
 type LobbyServiceConf struct {
