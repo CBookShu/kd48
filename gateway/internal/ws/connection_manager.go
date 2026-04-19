@@ -121,23 +121,44 @@ func (cm *ConnectionManager) Stop() {
 	}
 }
 
-// checkAllConnections 检查所有连接的超时状态
+// checkAllConnections 检查所有连接的超时状态（包括心跳超时和空闲超时）
 func (cm *ConnectionManager) checkAllConnections() {
 	cm.connMu.Lock()
 	defer cm.connMu.Unlock()
 
-	toDisconnect := make([]string, 0)
+	heartbeatTimeoutClients := make([]string, 0)
+	idleTimeoutClients := make([]string, 0)
 
 	for clientID := range cm.connections {
+		// 检查心跳超时
 		if cm.heartbeat.CheckTimeout(clientID) {
-			toDisconnect = append(toDisconnect, clientID)
+			heartbeatTimeoutClients = append(heartbeatTimeoutClients, clientID)
+			continue
+		}
+
+		// 检查空闲超时（如果有配置）
+		if cm.heartbeat.config.IdleTimeout > 0 {
+			state := cm.heartbeat.GetState(clientID)
+			if state != nil && !state.lastActivity.IsZero() {
+				if time.Since(state.lastActivity) > cm.heartbeat.config.IdleTimeout {
+					idleTimeoutClients = append(idleTimeoutClients, clientID)
+				}
+			}
 		}
 	}
 
-	// 断开超时的连接
-	for _, clientID := range toDisconnect {
+	// 断开心跳超时的连接
+	for _, clientID := range heartbeatTimeoutClients {
 		if conn, exists := cm.connections[clientID]; exists {
 			cm.disconnectClientUnlocked(clientID, conn, "heartbeat timeout")
+			cm.metrics.HeartbeatFailures++
+		}
+	}
+
+	// 断开空闲超时的连接
+	for _, clientID := range idleTimeoutClients {
+		if conn, exists := cm.connections[clientID]; exists {
+			cm.disconnectClientUnlocked(clientID, conn, "idle timeout")
 		}
 	}
 }
@@ -184,6 +205,11 @@ func (cm *ConnectionManager) RecordPing(clientID string) {
 // RecordPong 记录客户端pong（提供给外部调用）
 func (cm *ConnectionManager) RecordPong(clientID string) {
 	cm.heartbeat.RecordPong(clientID)
+}
+
+// RecordActivity 记录客户端活动（用于空闲检测）
+func (cm *ConnectionManager) RecordActivity(clientID string) {
+	cm.heartbeat.RecordActivity(clientID)
 }
 
 // GetHeartbeatState 获取心跳状态（返回副本）

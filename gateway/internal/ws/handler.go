@@ -181,6 +181,11 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 		}
 
 		h.sendResp(ctx, conn, req.Method, int32(codes.OK), "success", data)
+
+		// 记录客户端活动（用于空闲检测）
+		if h.connManager != nil && meta.clientID != "" {
+			h.connManager.RecordActivity(meta.clientID)
+		}
 	}
 }
 

@@ -10,6 +10,7 @@ type HeartbeatConfig struct {
 	Interval     time.Duration // 心跳间隔
 	Timeout      time.Duration // 心跳超时
 	MaxMissed    int           // 最大丢失次数
+	IdleTimeout  time.Duration // 空闲超时（无活动自动断开）
 }
 
 // HeartbeatManager 心跳管理器
@@ -24,6 +25,7 @@ type HeartbeatManager struct {
 type connectionState struct {
 	lastPing     time.Time // 上次收到客户端Ping的时间
 	lastPong     time.Time // 上次客户端收到服务器Pong的时间（或客户端响应的时间）
+	lastActivity time.Time // 最后活动时间（用于空闲检测）
 	missedCount  int       // 连续超时次数
 	isAlive      bool      // 连接是否存活
 }
@@ -43,15 +45,18 @@ func (hm *HeartbeatManager) RecordPing(clientID string) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
+	now := time.Now()
 	if state, exists := hm.connections[clientID]; exists {
-		state.lastPing = time.Now()
+		state.lastPing = now
+		state.lastActivity = now
 		state.missedCount = 0
 	} else {
 		hm.connections[clientID] = &connectionState{
-			lastPing:    time.Now(),
-			lastPong:    time.Time{},
-			missedCount: 0,
-			isAlive:     true,
+			lastPing:     now,
+			lastPong:     time.Time{},
+			lastActivity: now,
+			missedCount:  0,
+			isAlive:      true,
 		}
 	}
 }
@@ -66,6 +71,17 @@ func (hm *HeartbeatManager) RecordPong(clientID string) {
 	if state, exists := hm.connections[clientID]; exists {
 		state.lastPong = time.Now()
 		state.missedCount = 0
+	}
+}
+
+// RecordActivity 记录客户端活动（用于空闲检测）
+// 任何客户端发送的消息都应该调用此方法
+func (hm *HeartbeatManager) RecordActivity(clientID string) {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	if state, exists := hm.connections[clientID]; exists {
+		state.lastActivity = time.Now()
 	}
 }
 
