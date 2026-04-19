@@ -28,6 +28,8 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	c, err := conf.Load("./config.yaml")
 	if err != nil {
 		panic(err)
@@ -73,15 +75,28 @@ func main() {
 
 	atomicRT := ws.NewAtomicRouter()
 	mgr := bootstrap.NewManager(etcdCli, atomicRT, c.Gateway.MetaServiceTypesPrefix, c.Gateway.MetaGatewayRoutesPrefix, dialOpts)
-	if err := mgr.Bootstrap(context.Background()); err != nil {
+	if err := mgr.Bootstrap(ctx); err != nil {
 		slog.Error("gateway meta bootstrap failed", "error", err)
 		os.Exit(1)
 	}
 
-	metaCtx, metaCancel := context.WithCancel(context.Background())
+	metaCtx, metaCancel := context.WithCancel(ctx)
 	defer metaCancel()
 	go mgr.Run(metaCtx)
 	defer mgr.Close()
+
+	// 初始化连接管理器
+	heartbeatConfig := ws.HeartbeatConfig{
+		Interval:  30 * time.Second, // 心跳间隔
+		Timeout:   45 * time.Second, // 心跳超时（比间隔长，允许网络延迟）
+		MaxMissed: 3,                // 最大丢失心跳次数
+	}
+	connManager := ws.NewConnectionManager(heartbeatConfig)
+
+	// 启动连接管理器的后台检查
+	connManagerCtx, connManagerCancel := context.WithCancel(ctx)
+	defer connManagerCancel()
+	go connManager.Start(connManagerCtx)
 
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
@@ -107,6 +122,8 @@ func main() {
 
 	slog.Info("Shutting down server...")
 	metaCancel()
+	connManagerCancel() // 停止连接管理器
+	connManager.Stop()  // 等待连接管理器完全停止
 	if err := app.ShutdownWithTimeout(5 * time.Second); err != nil {
 		slog.Error("Fiber shutdown error", "error", err)
 	}
