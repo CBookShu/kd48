@@ -6,6 +6,10 @@ gateway:
   port: 8080
   meta_service_types_prefix: "kd48/meta/service-types/"
   meta_gateway_routes_prefix: "kd48/meta/gateway-routes/"
+  # 心跳配置（服务端被动模式）
+  heartbeat:
+    server_timeout: 90s    # 无活动超时时间（客户端应每 30s 发送心跳）
+    check_interval: 5s     # 服务端扫描间隔
 
 user_service:
   port: 9000
