@@ -86,10 +86,16 @@ func main() {
 	defer mgr.Close()
 
 	// 初始化连接管理器
+	// 配置说明：
+	// - Interval: 心跳检测间隔（客户端应在此间隔内发送Ping）
+	// - Timeout: 心跳超时（超过此时间未收到响应视为可能断开）
+	// - MaxMissed: 最大允许丢失心跳次数（连续超时达到此值则断开连接）
+	// - IdleTimeout: 空闲超时（无任何活动达到此时间则断开连接，0表示不启用）
 	heartbeatConfig := ws.HeartbeatConfig{
-		Interval:  30 * time.Second, // 心跳间隔
-		Timeout:   45 * time.Second, // 心跳超时（比间隔长，允许网络延迟）
-		MaxMissed: 3,                // 最大丢失心跳次数
+		Interval:    30 * time.Second, // 心跳间隔30秒
+		Timeout:     45 * time.Second, // 超时45秒（比间隔长，允许网络延迟）
+		MaxMissed:   3,                // 允许连续3次超时
+		IdleTimeout: 30 * time.Minute, // 30分钟无活动断开
 	}
 	connManager := ws.NewConnectionManager(heartbeatConfig)
 
