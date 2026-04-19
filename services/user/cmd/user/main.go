@@ -171,16 +171,17 @@ func main() {
 	}()
 
 	// 2. 注册到 Etcd
-	// 方案 A：纯配置驱动
-	// - 生产环境（env != "dev"）：advertise_addr 必须配置，否则启动失败
-	// - 开发环境（env == "dev"）：允许回退到 localhost
-	advertiseAddr := c.UserService.AdvertiseAddr
+	// 广播地址从环境变量 ADVERTISE_ADDR 读取
+	// - K8s: 通过 Downward API 注入 POD_IP
+	// - Docker Compose: 使用服务名
+	// - 本地开发: 留空则使用 localhost
+	advertiseAddr := os.Getenv("ADVERTISE_ADDR")
 	if advertiseAddr == "" {
 		if c.Server.Env == "dev" {
 			advertiseAddr = "localhost"
-			slog.Warn("advertise_addr not configured, falling back to localhost (dev mode)")
+			slog.Warn("ADVERTISE_ADDR not set, falling back to localhost (dev mode)")
 		} else {
-			slog.Error("advertise_addr is required in non-dev environment", "env", c.Server.Env)
+			slog.Error("ADVERTISE_ADDR environment variable is required in non-dev environment", "env", c.Server.Env)
 			os.Exit(1)
 		}
 	}

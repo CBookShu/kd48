@@ -33,13 +33,11 @@ type GatewayConf struct {
 }
 
 type UserServiceConf struct {
-	Port          int    `mapstructure:"port"`
-	AdvertiseAddr string `mapstructure:"advertise_addr"`
+	Port int `mapstructure:"port"`
 }
 
 type LobbyServiceConf struct {
-	Port            int    `mapstructure:"port"`
-	AdvertiseAddr   string `mapstructure:"advertise_addr"`
+	Port int `mapstructure:"port"`
 }
 
 // 🚨 修改点：增加 FilePath 字段

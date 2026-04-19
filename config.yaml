@@ -9,22 +9,9 @@ gateway:
 
 user_service:
   port: 9000
-  # 服务注册到 etcd 的广播地址（同 lobby_service 配置说明）
-  advertise_addr: ""
 
 lobby_service:
   port: 9001
-  # 服务注册到 etcd 的广播地址
-  # - 开发环境 (env: dev)：可留空，自动使用 localhost
-  # - 生产环境：必须配置，否则服务启动失败
-  # 
-  # K8s 环境示例：
-  #   advertise_addr: "${POD_IP}"
-  # Docker Compose 环境示例：
-  #   advertise_addr: "lobby-service"  # 使用服务名
-  # 物理机环境示例：
-  #   advertise_addr: "192.168.1.100"
-  advertise_addr: ""
 
 log:
   level: "debug" # debug, info, warn, error
