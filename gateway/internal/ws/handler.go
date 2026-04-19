@@ -82,15 +82,12 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 	var msg []byte
 	var err error
 
-	// 设置 Ping 处理器（如果连接管理器已启用）
-	// 当服务器向客户端发送 Ping 时，客户端回复 Pong，此 handler 被调用
-	// 此处记录客户端的响应（表示连接仍活跃）
+	// 设置 Pong 处理器（当服务器向客户端发送 Ping 后收到响应时调用）
+	// 这表示客户端成功收到了服务器的 Ping 并回复了 Pong，连接活跃
 	if h.connManager != nil {
-		conn.SetPingHandler(func(appData string) error {
-			// 收到客户端的 Ping，记录心跳
-			h.connManager.RecordPing(clientID)
-			// 回复 Pong
-			return conn.WriteMessage(websocket.PongMessage, []byte(appData))
+		conn.SetPongHandler(func(appData string) error {
+			h.connManager.RecordPong(clientID)
+			return nil
 		})
 	}
 
@@ -106,8 +103,17 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 			break
 		}
 
+		// 处理 Ping 消息（客户端主动发送的 Ping）
+		// 表示客户端仍然在线，记录最后活跃时间
+		if msgType == websocket.PingMessage {
+			if h.connManager != nil {
+				h.connManager.RecordPing(clientID)
+			}
+			continue
+		}
+
 		// 处理 Pong 消息（客户端响应服务器发起的 Ping）
-		// 注意：Ping 消息由 SetPingHandler 自动处理（见上文），不会到达这里
+		// 表示客户端收到了服务器的 Ping 并响应
 		if msgType == websocket.PongMessage {
 			if h.connManager != nil {
 				h.connManager.RecordPong(clientID)
