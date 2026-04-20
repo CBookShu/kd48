@@ -35,14 +35,18 @@
     │ 1. brainstorming   │   │ • 简要确认目标      │
     │    (设计文档)       │   │ • 直接执行          │
     │        ↓           │   │ • 验证通过即可      │
-    │ 2. writing-plans   │   │                    │
-    │    (实现计划)       │   │ 适用于豁免清单场景   │
-    │        ↓           │   └──────────┬─────────┘
-    │ 3. TDD 开发        │              │
+    │ 2. using-git-      │   │                    │
+    │    worktrees       │   │ 适用于豁免清单场景   │
+    │    (隔离环境)       │   └──────────┬─────────┘
     │        ↓           │              │
-    │ 4. verification    │              │
+    │ 3. writing-plans   │              │
+    │    (实现计划)       │              │
     │        ↓           │              │
-    │ 5. code-review     │◄─────────────┘
+    │ 4. TDD 开发        │              │
+    │        ↓           │              │
+    │ 5. verification    │              │
+    │        ↓           │              │
+    │ 6. code-review     │◄─────────────┘
     └────────┬───────────┘
              ▼
     ┌────────────────────┐
@@ -113,6 +117,7 @@ go vet ./...
 | 阶段 | 对应 Skill | 输出物 | 豁免? |
 |------|-----------|--------|-------|
 | 需求澄清 | `superpowers:brainstorming` | 设计文档 (specs/) | 豁免清单场景可简化 |
+| 环境隔离 | `superpowers:using-git-worktrees` | Git 工作树 | 豁免清单场景可跳过 |
 | 计划制定 | `superpowers:writing-plans` | 计划文档 (plans/) | 豁免清单场景可跳过 |
 | 代码实现 | `superpowers:test-driven-development` | 代码 + 测试 | 永不豁免 |
 | 完成验证 | `superpowers:verification-before-completion` | 验证报告 | 永不豁免 |

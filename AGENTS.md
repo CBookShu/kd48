@@ -73,7 +73,7 @@
 ### 标准流程
 
 ```
-brainstorming → writing-plans → TDD开发 → verification → code-review → 完成
+brainstorming → using-git-worktrees → writing-plans → TDD开发 → verification → code-review → 完成
 ```
 
 ### 豁免清单（可跳过 brainstorming 和 writing-plans）
