@@ -6,16 +6,21 @@
 
 ## 已完成
 
-### WebSocket 心跳机制修复 (2026-04-20)
+### WebSocket 心跳与连接管理 (2026-04-20)
 
 - [x] 服务端收到 Ping 后回复 Pong（RFC 6455 合规）
 - [x] RecordActivity 记录活动时间用于超时检测
 - [x] 配置参数化（server_timeout: 90s, check_interval: 5s）
 - [x] 单元测试覆盖
+- [x] **HeartbeatManager** 心跳状态管理（Ping/Pong/超时检测）
+- [x] **ConnectionManager** 连接生命周期管理（注册/注销/断开）
+- [x] 空闲连接自动断开（IdleTimeout 配置）
+- [x] 连接统计指标（TotalConnections/ActiveConnections/HeartbeatFailures）
 
-**相关文档**:
-- `docs/superpowers/specs/2026-04-20-heartbeat-design.md`
-- `docs/superpowers/plans/2026-04-20-heartbeat-fix-plan.md`
+**相关文件**:
+- `gateway/internal/ws/heartbeat.go`
+- `gateway/internal/ws/connection_manager.go`
+- `gateway/internal/ws/handler.go`
 
 **验证命令**:
 ```bash
@@ -108,25 +113,89 @@ go build ./services/lobby/...
 
 ### 高优先级
 
-(无)
+#### P0: 顶号/踢人机制 ⏱️ 3-4天
+- [ ] 明确产品策略（单终端 vs 多终端）
+- [ ] 实现Redis会话管理和强制断开
+- [ ] 添加管理API（运营踢人）
+- [ ] 重复登录检测与旧连接断开
+
+**说明**: 会话基础已存在（`services/user/cmd/user/server.go` 的 `issueSession`），但强制断开逻辑待实现。
+
+#### P0: Lobby 服务剩余任务
+- [ ] Task 4: 配置加载器与快照（Bootstrap + 强类型 JSON）
+- [ ] Task 5: Redis 变更通知（订阅 `kd48:lobby:config:notify`）
+- [ ] Task 6: GatewayIngress 与网关元数据种子（部分完成）
+
+**说明**: Task 1-3 已完成（核心骨架、Proto、MySQL迁移、gRPC注册、etcd注册）。
+
+---
+
+### 中优先级
+
+#### P1: 网关多服务验证 ⏱️ 1-2天
+- [ ] 测试同时运行 User 和 Lobby 服务
+- [ ] 验证动态路由更新
+- [ ] 文档化多服务接入流程
+
+**说明**: 代码已支持多服务（`AtomicRouter`、`Manager`），需验证实际运行。
+
+#### P1: 统一API响应格式 ⏱️ 2-3天
+- [ ] 设计通用 `ApiResponse` proto
+- [ ] 统一错误码和消息格式
+- [ ] 更新现有服务响应格式
+
+#### P1: 监控体系完善 ⏱️ 3-4天
+- [ ] 添加业务指标（活跃连接、QPS等）
+- [ ] 设置Grafana仪表板
+- [ ] 配置告警规则
+
+**说明**: OTel 基础已就绪（`pkg/otelkit`），需完善业务指标。
+
+---
+
+### 低优先级
+
+#### P2: 流量控制和染色 ⏱️ 3-4天
+- [ ] 实现基于令牌桶的限流
+- [ ] 支持请求染色和AB测试
+- [ ] 配置管理界面
+
+#### P2: 负载均衡扩展 ⏱️ 2-3天
+- [ ] 实现最少连接、一致性哈希等算法
+- [ ] 支持动态权重调整
+- [ ] 性能测试和对比
+
+#### P2: 部署构建优化 ⏱️ 2-3天
+- [ ] 完善GitHub Actions流水线
+- [ ] 优化Docker镜像构建
+- [ ] 添加健康检查和就绪探针
+
+#### P3: 代码质量改进
+- [ ] 检查并重构过长的方法名
+- [ ] 补充单元测试
+- [ ] 完善代码文档
+
+---
 
 ### 未完成的实现计划
 
 | 计划文档 | 状态 | 说明 |
 |----------|------|------|
-| `2026-04-18-datasource-routing-implementation-plan.md` | 部分 | dsroute 核心已实现，但规格文档中的多数据源配置可能未完全接入 |
-| `2026-04-15-lobby-service-implementation-plan.md` | 部分完成 | Task 1-3 已完成（核心骨架），Task 4-6 待执行 |
-| `2026-04-13-gateway-ingress-implementation-plan.md` | 已完成 | 网关 Ingress（含 `GatewayIngress`） |
-| `2026-04-13-gateway-etcd-meta-implementation-plan.md` | 已完成 | 网关 Etcd 元数据（含 Watch 热更新、Bootstrap、draining） |
+| `2026-04-15-lobby-service-implementation-plan.md` | 进行中 | Task 1-3 已完成，Task 4-6 待执行 |
+| `2026-04-18-datasource-routing-implementation-plan.md` | ✅ 已完成 | dsroute 核心已实现，Router/Loader/LPM 全部就绪 |
+| `2026-04-13-gateway-ingress-implementation-plan.md` | ✅ 已完成 | 网关 Ingress（含 `GatewayIngress`） |
+| `2026-04-13-gateway-etcd-meta-implementation-plan.md` | ✅ 已完成 | 网关 Etcd 元数据（含 Watch 热更新、Bootstrap、draining） |
+| `2026-04-20-heartbeat-fix-plan.md` | ✅ 已完成 | 心跳与连接管理 |
 
-### 规格文档待实现
+### 规格文档状态
 
 | 规格文档 | 状态 | 说明 |
 |----------|------|------|
-| `2026-04-17-datasource-routing-and-pools.md` | 已完成 | dsroute 包已实现 |
-| `2026-04-15-lobby-service-design.md` | 待实现 | 大厅服务设计 |
+| `2026-04-17-datasource-routing-and-pools.md` | ✅ 已完成 | dsroute 包已实现 |
+| `2026-04-20-heartbeat-design.md` | ✅ 已完成 | 心跳与连接管理设计 |
+| `2026-04-15-lobby-service-design.md` | 进行中 | Task 1-3 完成，Task 4-6 待实现 |
 | `2026-04-16-lobby-config-csv-and-tooling-spec.md` | 待实现 | 大厅配置与工具 |
-| `2026-04-13-gateway-backend-connection-design.md` | 待确认 | 网关后端连接 |
+| `2026-04-13-gateway-backend-connection-design.md` | ✅ 已完成 | 网关后端连接 |
 | `2026-04-13-kd48-roadmap.md` | 路线图 | M0-M5+ 阶段规划 |
 
 ---
