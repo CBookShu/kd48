@@ -13,11 +13,12 @@ import (
 // 负责连接注册、心跳监控、超时断开
 
 type ConnectionManager struct {
-	heartbeat      *HeartbeatManager
-	connections    map[string]*websocket.Conn
-	connMu         sync.RWMutex
-	stopCh         chan struct{}
-	metrics        ConnectionMetrics
+	heartbeat       *HeartbeatManager
+	connections     map[string]*websocket.Conn // clientID → conn
+	userConnections map[int64]string           // userID → clientID
+	connMu          sync.RWMutex
+	stopCh          chan struct{}
+	metrics         ConnectionMetrics
 }
 
 // ConnectionMetrics 连接统计指标
@@ -31,10 +32,11 @@ type ConnectionMetrics struct {
 // NewConnectionManager 创建连接管理器
 func NewConnectionManager(hbConfig HeartbeatConfig) *ConnectionManager {
 	return &ConnectionManager{
-		heartbeat:   NewHeartbeatManager(hbConfig),
-		connections: make(map[string]*websocket.Conn),
-		stopCh:      make(chan struct{}),
-		metrics:     ConnectionMetrics{},
+		heartbeat:       NewHeartbeatManager(hbConfig),
+		connections:     make(map[string]*websocket.Conn),
+		userConnections: make(map[int64]string),
+		stopCh:          make(chan struct{}),
+		metrics:         ConnectionMetrics{},
 	}
 }
 
@@ -83,6 +85,14 @@ func (cm *ConnectionManager) UnregisterConnection(clientID string) {
 
 		if cm.metrics.ActiveConnections < 0 {
 			cm.metrics.ActiveConnections = 0
+		}
+
+		// Also clean up userConnections (find userID by clientID)
+		for uid, cid := range cm.userConnections {
+			if cid == clientID {
+				delete(cm.userConnections, uid)
+				break
+			}
 		}
 
 		slog.Info("connection unregistered",
@@ -222,4 +232,20 @@ func (cm *ConnectionManager) GetActiveConnectionCount() int {
 	cm.connMu.RLock()
 	defer cm.connMu.RUnlock()
 	return len(cm.connections)
+}
+
+// RegisterUserConnection 登录成功后关联 userID 与 clientID
+func (cm *ConnectionManager) RegisterUserConnection(userID int64, clientID string) {
+	cm.connMu.Lock()
+	defer cm.connMu.Unlock()
+	cm.userConnections[userID] = clientID
+	slog.Debug("user connection registered", "user_id", userID, "client_id", clientID)
+}
+
+// GetUserClientID 根据 userID 查找 clientID
+func (cm *ConnectionManager) GetUserClientID(userID int64) (string, bool) {
+	cm.connMu.RLock()
+	defer cm.connMu.RUnlock()
+	clientID, exists := cm.userConnections[userID]
+	return clientID, exists
 }

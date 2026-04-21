@@ -218,3 +218,79 @@ func TestConnectionManager_HeartbeatTimeout(t *testing.T) {
 		t.Error("should indicate disconnect after second timeout check (MaxMissed=2, missedCount=2)")
 	}
 }
+
+func TestConnectionManager_RegisterUserConnection(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	clientID := "conn-123"
+	userID := int64(456)
+
+	// 先注册连接
+	cm.RegisterConnection(clientID, nil)
+
+	// 关联 userID
+	cm.RegisterUserConnection(userID, clientID)
+
+	// 验证可以通过 userID 找到 clientID
+	foundClientID, exists := cm.GetUserClientID(userID)
+	if !exists {
+		t.Error("user connection should exist")
+	}
+	if foundClientID != clientID {
+		t.Errorf("foundClientID = %q, want %q", foundClientID, clientID)
+	}
+}
+
+func TestConnectionManager_RegisterUserConnection_Replace(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	cm.RegisterConnection("conn-1", nil)
+	cm.RegisterConnection("conn-2", nil)
+
+	userID := int64(100)
+
+	// 第一次关联
+	cm.RegisterUserConnection(userID, "conn-1")
+	found1, _ := cm.GetUserClientID(userID)
+	if found1 != "conn-1" {
+		t.Errorf("first association failed")
+	}
+
+	// 第二次关联（替换）
+	cm.RegisterUserConnection(userID, "conn-2")
+	found2, _ := cm.GetUserClientID(userID)
+	if found2 != "conn-2" {
+		t.Errorf("second association should replace first, got %q", found2)
+	}
+}
+
+func TestConnectionManager_UnregisterConnection_CleansUserMapping(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	clientID := "conn-123"
+	userID := int64(456)
+
+	cm.RegisterConnection(clientID, nil)
+	cm.RegisterUserConnection(userID, clientID)
+
+	// Unregister should also clean up userConnections
+	cm.UnregisterConnection(clientID)
+
+	// Verify user mapping is gone
+	_, exists := cm.GetUserClientID(userID)
+	if exists {
+		t.Error("user connection mapping should be removed when connection unregisters")
+	}
+}
