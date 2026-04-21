@@ -44,11 +44,14 @@ func (p *Parser) Parse(r io.Reader, filename string) (*Sheet, error) {
 			if j < numCols {
 				typ = headers[j].Type
 			}
-			values[j] = Value{
-				Raw:     raw,
-				Type:    typ,
-				IsEmpty: strings.TrimSpace(raw) == "",
+			// Call ParseValue to properly populate the Parsed field
+			parsedValue, err := ParseValue(raw, typ)
+			if err != nil {
+				return nil, &ParseError{
+					Message: err.Error(),
+				}
 			}
+			values[j] = parsedValue
 		}
 		rows = append(rows, Row{Values: values})
 	}
