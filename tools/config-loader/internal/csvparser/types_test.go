@@ -65,8 +65,8 @@ func TestParseValue_Map(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseValue() error = %v", err)
 	}
-	m := v.Parsed.(map[string]interface{})
-	if m["32"] != "15" || m["45"] != "hello" {
+	m := v.Parsed.(map[int32]string)
+	if m[32] != "15" || m[45] != "hello" {
 		t.Errorf("Parsed = %v, want {32: '15', 45: 'hello'}", m)
 	}
 }

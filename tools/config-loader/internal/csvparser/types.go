@@ -139,33 +139,111 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 
 	parts := strings.Split(typ, "=")
 	keyType := strings.TrimSpace(parts[0])
+	valueType := strings.TrimSpace(parts[1])
 
 	entries := strings.Split(raw, "|")
-	result := make(map[string]interface{})
 
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
+	// Build map with proper type based on key/value types
+	switch {
+	case keyType == "int32" && valueType == "string":
+		result := make(map[int32]string)
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key, _ := strconv.ParseInt(strings.TrimSpace(kv[0]), 10, 32)
+			value := unquote(strings.TrimSpace(kv[1]))
+			result[int32(key)] = value
 		}
-		kv := splitKeyValue(entry)
-		if len(kv) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(kv[0])
-		value := strings.TrimSpace(kv[1])
-
-		key = unquote(key)
-		value = unquote(value)
-
-		if keyType == "int32" || keyType == "int64" {
-			n, _ := strconv.ParseInt(key, 10, 64)
-			result[strconv.FormatInt(n, 10)] = value
-		} else {
+		v.Parsed = result
+	case keyType == "int64" && valueType == "string":
+		result := make(map[int64]string)
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key, _ := strconv.ParseInt(strings.TrimSpace(kv[0]), 10, 64)
+			value := unquote(strings.TrimSpace(kv[1]))
 			result[key] = value
 		}
+		v.Parsed = result
+	case keyType == "string" && valueType == "int32":
+		result := make(map[string]int32)
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key := unquote(strings.TrimSpace(kv[0]))
+			value, _ := strconv.ParseInt(strings.TrimSpace(kv[1]), 10, 32)
+			result[key] = int32(value)
+		}
+		v.Parsed = result
+	case keyType == "string" && valueType == "int64":
+		result := make(map[string]int64)
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key := unquote(strings.TrimSpace(kv[0]))
+			value, _ := strconv.ParseInt(strings.TrimSpace(kv[1]), 10, 64)
+			result[key] = value
+		}
+		v.Parsed = result
+	case keyType == "string" && valueType == "string":
+		result := make(map[string]string)
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key := unquote(strings.TrimSpace(kv[0]))
+			value := unquote(strings.TrimSpace(kv[1]))
+			result[key] = value
+		}
+		v.Parsed = result
+	default:
+		// Fallback to map[string]interface{} for unknown types
+		result := make(map[string]interface{})
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			kv := splitKeyValue(entry)
+			if len(kv) != 2 {
+				continue
+			}
+			key := unquote(strings.TrimSpace(kv[0]))
+			value := unquote(strings.TrimSpace(kv[1]))
+			result[key] = value
+		}
+		v.Parsed = result
 	}
-	v.Parsed = result
+
 	return v, nil
 }
 
