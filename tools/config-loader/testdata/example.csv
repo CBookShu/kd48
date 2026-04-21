@@ -1,0 +1,4 @@
+奖励说明,数量,标签,开始时间
+note,amount,tags,start_time
+string,int32,string[],time
+首登奖,10,'vip'|'hot',2026-04-15 10:00:00
