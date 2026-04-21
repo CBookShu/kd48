@@ -6,4 +6,5 @@ use (
 	./pkg
 	./services/lobby
 	./services/user
+	./tools/config-loader
 )
