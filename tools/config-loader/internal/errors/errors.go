@@ -11,6 +11,7 @@ const (
 	ErrInvalidValue
 	ErrTimeEmpty
 	ErrDuplicateColumn
+	ErrDuplicateKey
 	ErrMySQLWrite
 	ErrRedisPublish
 	ErrGoGenerate

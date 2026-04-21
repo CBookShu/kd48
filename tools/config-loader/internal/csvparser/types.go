@@ -147,7 +147,7 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 	switch {
 	case keyType == "int32" && valueType == "string":
 		result := make(map[int32]string)
-		for _, entry := range entries {
+		for i, entry := range entries {
 			entry = strings.TrimSpace(entry)
 			if entry == "" {
 				continue
@@ -156,14 +156,35 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 			if len(kv) != 2 {
 				continue
 			}
-			key, _ := strconv.ParseInt(unquote(strings.TrimSpace(kv[0])), 10, 32)
+			keyStr := unquote(strings.TrimSpace(kv[0]))
+			key, err := strconv.ParseInt(keyStr, 10, 32)
+			if err != nil {
+				return v, errors.New(errors.ErrInvalidValue, "invalid int32 key", -1, -1, keyStr)
+			}
 			value := unquote(strings.TrimSpace(kv[1]))
 			result[int32(key)] = value
+			// Check for duplicate key (only warn, don't fail)
+			if i > 0 {
+				for j := 0; j < i; j++ {
+					prevEntry := strings.TrimSpace(entries[j])
+					if prevEntry == "" {
+						continue
+					}
+					prevKv := splitKeyValue(prevEntry)
+					if len(prevKv) == 2 {
+						prevKeyStr := unquote(strings.TrimSpace(prevKv[0]))
+						prevKey, pe := strconv.ParseInt(prevKeyStr, 10, 32)
+						if pe == nil && int32(prevKey) == int32(key) {
+							return v, errors.New(errors.ErrDuplicateKey, "duplicate key in map", -1, -1, keyStr)
+						}
+					}
+				}
+			}
 		}
 		v.Parsed = result
 	case keyType == "int64" && valueType == "string":
 		result := make(map[int64]string)
-		for _, entry := range entries {
+		for i, entry := range entries {
 			entry = strings.TrimSpace(entry)
 			if entry == "" {
 				continue
@@ -172,9 +193,30 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 			if len(kv) != 2 {
 				continue
 			}
-			key, _ := strconv.ParseInt(unquote(strings.TrimSpace(kv[0])), 10, 64)
+			keyStr := unquote(strings.TrimSpace(kv[0]))
+			key, err := strconv.ParseInt(keyStr, 10, 64)
+			if err != nil {
+				return v, errors.New(errors.ErrInvalidValue, "invalid int64 key", -1, -1, keyStr)
+			}
 			value := unquote(strings.TrimSpace(kv[1]))
 			result[key] = value
+			// Check for duplicate key
+			if i > 0 {
+				for j := 0; j < i; j++ {
+					prevEntry := strings.TrimSpace(entries[j])
+					if prevEntry == "" {
+						continue
+					}
+					prevKv := splitKeyValue(prevEntry)
+					if len(prevKv) == 2 {
+						prevKeyStr := unquote(strings.TrimSpace(prevKv[0]))
+						prevKey, pe := strconv.ParseInt(prevKeyStr, 10, 64)
+						if pe == nil && prevKey == key {
+							return v, errors.New(errors.ErrDuplicateKey, "duplicate key in map", -1, -1, keyStr)
+						}
+					}
+				}
+			}
 		}
 		v.Parsed = result
 	case keyType == "string" && valueType == "int32":
@@ -189,7 +231,11 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 				continue
 			}
 			key := unquote(strings.TrimSpace(kv[0]))
-			value, _ := strconv.ParseInt(strings.TrimSpace(kv[1]), 10, 32)
+			valueStr := strings.TrimSpace(kv[1])
+			value, err := strconv.ParseInt(valueStr, 10, 32)
+			if err != nil {
+				return v, errors.New(errors.ErrInvalidValue, "invalid int32 value for key", -1, -1, key)
+			}
 			result[key] = int32(value)
 		}
 		v.Parsed = result
@@ -205,7 +251,11 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 				continue
 			}
 			key := unquote(strings.TrimSpace(kv[0]))
-			value, _ := strconv.ParseInt(strings.TrimSpace(kv[1]), 10, 64)
+			valueStr := strings.TrimSpace(kv[1])
+			value, err := strconv.ParseInt(valueStr, 10, 64)
+			if err != nil {
+				return v, errors.New(errors.ErrInvalidValue, "invalid int64 value for key", -1, -1, key)
+			}
 			result[key] = value
 		}
 		v.Parsed = result
