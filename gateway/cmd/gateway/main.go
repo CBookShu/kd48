@@ -104,6 +104,13 @@ func main() {
 	defer connManagerCancel()
 	go connManager.Start(connManagerCtx)
 
+	// 启动 Session 失效订阅器
+	sessionSubscriber := ws.NewSessionInvalidationSubscriber(rdb, connManager, ws.SessionInvalidateChannel)
+	subscriberCtx, subscriberCancel := context.WithCancel(ctx)
+	defer subscriberCancel()
+	go sessionSubscriber.Start(subscriberCtx)
+	slog.Info("Session invalidate subscriber started")
+
 	tracer := otel.Tracer("github.com/CBookShu/kd48/gateway")
 
 	wsHandler := ws.NewHandler(tracer, atomicRT, connManager)
