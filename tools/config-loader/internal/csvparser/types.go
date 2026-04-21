@@ -156,7 +156,7 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 			if len(kv) != 2 {
 				continue
 			}
-			key, _ := strconv.ParseInt(strings.TrimSpace(kv[0]), 10, 32)
+			key, _ := strconv.ParseInt(unquote(strings.TrimSpace(kv[0])), 10, 32)
 			value := unquote(strings.TrimSpace(kv[1]))
 			result[int32(key)] = value
 		}
@@ -172,7 +172,7 @@ func parseMap(v Value, raw, typ string) (Value, error) {
 			if len(kv) != 2 {
 				continue
 			}
-			key, _ := strconv.ParseInt(strings.TrimSpace(kv[0]), 10, 64)
+			key, _ := strconv.ParseInt(unquote(strings.TrimSpace(kv[0])), 10, 64)
 			value := unquote(strings.TrimSpace(kv[1]))
 			result[key] = value
 		}
