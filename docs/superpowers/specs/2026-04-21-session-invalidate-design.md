@@ -3,6 +3,7 @@
 **日期**: 2026-04-21
 **状态**: 已批准
 **作者**: Claude
+**更新**: 2026-04-22 - 增加断开前推送业务消息的设计
 
 ---
 
@@ -16,7 +17,8 @@
 
 - **单终端模式**：同一账号同时只能一个设备在线
 - 新登录时自动踢掉旧设备，无需用户手动操作
-- 旧设备收到 WebSocket 关闭消息，提示 "session replaced"
+- 旧设备先收到业务消息 `session_kicked`，再断开 WebSocket 连接
+- 客户端收到踢下线通知后，不允许自动重连，引导用户重新登录
 
 ---
 
@@ -168,6 +170,8 @@ func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string)
 
 ### 6.3 DisconnectByUserID 实现
 
+**重要：先推送业务消息再断开，让客户端能显示友好提示。**
+
 ```go
 func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
     cm.connMu.Lock()
@@ -180,7 +184,14 @@ func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
 
     conn, exists := cm.connections[clientID]
     if exists && conn != nil {
-        // 发送关闭消息
+        // 1. 先发送业务消息（让客户端显示友好提示）
+        kickMsg := `{"method":"session_kicked","code":1008,"msg":"session replaced"}`
+        conn.WriteMessage(websocket.TextMessage, []byte(kickMsg))
+
+        // 2. 短暂延迟确保消息发送
+        time.Sleep(100 * time.Millisecond)
+
+        // 3. 发送 WebSocket Close 消息
         conn.WriteMessage(websocket.CloseMessage,
             websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason))
         conn.Close()
@@ -196,6 +207,13 @@ func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
         "user_id", userID, "reason", reason)
 }
 ```
+
+### 6.4 客户端处理
+
+客户端收到 `session_kicked` 消息后：
+1. 显示「您已在其他设备登录，请重新登录」提示
+2. **不允许自动重连**（旧 token 已失效）
+3. 引导用户返回登录页重新认证
 
 ---
 

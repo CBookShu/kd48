@@ -659,6 +659,8 @@ Expected: FAIL (方法未定义)
 
 - [ ] **Step 3: 实现 DisconnectByUserID**
 
+**重要：先推送业务消息再断开，让客户端能显示友好提示。**
+
 ```go
 // DisconnectByUserID 按 userID 断开连接（顶号时调用）
 func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
@@ -672,7 +674,14 @@ func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
 
 	conn, connExists := cm.connections[clientID]
 	if connExists && conn != nil {
-		// 发送关闭消息
+		// 1. 先发送业务消息（让客户端显示友好提示）
+		kickMsg := `{"method":"session_kicked","code":1008,"msg":"session replaced"}`
+		conn.WriteMessage(websocket.TextMessage, []byte(kickMsg))
+
+		// 2. 短暂延迟确保消息发送
+		time.Sleep(100 * time.Millisecond)
+
+		// 3. 发送 WebSocket Close 消息
 		conn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason))
 		conn.Close()
