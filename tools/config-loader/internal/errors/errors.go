@@ -22,6 +22,7 @@ type Error struct {
 	Line    int
 	Column  int
 	Raw     string
+	Meta    map[string]interface{}
 }
 
 func (e *Error) Error() string {
@@ -39,4 +40,12 @@ func New(code ErrorCode, message string, line, column int, raw string) *Error {
 		Column:  column,
 		Raw:     raw,
 	}
+}
+
+func (e *Error) WithMeta(key string, value interface{}) *Error {
+	if e.Meta == nil {
+		e.Meta = make(map[string]interface{})
+	}
+	e.Meta[key] = value
+	return e
 }
