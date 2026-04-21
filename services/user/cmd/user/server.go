@@ -35,6 +35,22 @@ func NewUserService(router *dsroute.Router, tokenTTL time.Duration) *userService
 
 const routingKeySession = "sys:session"
 
+// loginSessionLua 原子化 Session 创建 Lua 脚本
+// KEYS[1] = user:{userID}:session (userID → token 映射)
+// KEYS[2] = user:session:{newToken} (token → session 数据)
+// ARGV[1] = TTL (秒)
+// ARGV[2] = {userID}:{username} (session 数据)
+// ARGV[3] = newToken
+const loginSessionLua = `
+local oldToken = redis.call('GET', KEYS[1])
+if oldToken and oldToken ~= ARGV[3] then
+	redis.call('DEL', 'user:session:' .. oldToken)
+end
+redis.call('SETEX', KEYS[1], ARGV[1], ARGV[3])
+redis.call('SETEX', KEYS[2], ARGV[1], ARGV[2])
+return oldToken or ""
+`
+
 func (s *userService) getQueries(ctx context.Context, routingKey string) (*sqlc.Queries, error) {
 	db, _, err := s.router.ResolveDB(ctx, routingKey)
 	if err != nil {
@@ -64,6 +80,41 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 		return "", status.Error(codes.Internal, "internal server error")
 	}
 	return token, nil
+}
+
+// issueSessionAtomic 原子化创建 Session（使用 Lua 脚本）
+// 返回新 token 和是否有旧 token（用于发布 Pub/Sub）
+func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, username string) (string, bool, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		slog.ErrorContext(ctx, "Failed to generate token", "error", err)
+		return "", false, status.Error(codes.Internal, "internal server error")
+	}
+	token := hex.EncodeToString(tokenBytes)
+
+	userKey := fmt.Sprintf("user:%d:session", userID)
+	sessionKey := fmt.Sprintf("user:session:%s", token)
+	sessionValue := fmt.Sprintf("%d:%s", userID, username)
+
+	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to resolve redis for session", "error", err)
+		return "", false, status.Error(codes.Internal, "internal server error")
+	}
+
+	result, err := rdb.Eval(ctx, loginSessionLua,
+		[]string{userKey, sessionKey},
+		int64(s.tokenTTL.Seconds()), sessionValue, token).Result()
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to execute session Lua", "error", err)
+		return "", false, status.Error(codes.Internal, "internal server error")
+	}
+
+	// 检查是否有旧 token
+	oldToken, _ := result.(string)
+	hasOldToken := oldToken != ""
+
+	return token, hasOldToken, nil
 }
 
 func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
