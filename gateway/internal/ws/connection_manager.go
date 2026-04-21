@@ -249,3 +249,57 @@ func (cm *ConnectionManager) GetUserClientID(userID int64) (string, bool) {
 	clientID, exists := cm.userConnections[userID]
 	return clientID, exists
 }
+
+// DisconnectByUserID 按 userID 断开连接（顶号时调用）
+func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
+	cm.connMu.Lock()
+	clientID, exists := cm.userConnections[userID]
+	if !exists {
+		cm.connMu.Unlock()
+		return // 该网关实例没有这个用户的连接
+	}
+
+	conn, connExists := cm.connections[clientID]
+	if !connExists || conn == nil {
+		// 没有实际连接，只清理映射
+		delete(cm.connections, clientID)
+		delete(cm.userConnections, userID)
+		cm.metrics.ActiveConnections--
+		cm.metrics.DisconnectedCount++
+		if cm.metrics.ActiveConnections < 0 {
+			cm.metrics.ActiveConnections = 0
+		}
+		cm.connMu.Unlock()
+		return
+	}
+
+	// 从 maps 中移除，这样在发送消息时不会被其他操作干扰
+	delete(cm.connections, clientID)
+	delete(cm.userConnections, userID)
+	cm.metrics.ActiveConnections--
+	cm.metrics.DisconnectedCount++
+	if cm.metrics.ActiveConnections < 0 {
+		cm.metrics.ActiveConnections = 0
+	}
+	cm.connMu.Unlock()
+
+	// 现在不持有锁，安全地进行 WebSocket 操作
+	// 1. 先发送业务消息（让客户端显示友好提示）
+	kickMsg := `{"method":"session_kicked","code":1008,"msg":"session replaced"}`
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(kickMsg)); err != nil {
+		slog.Debug("failed to send kick message", "user_id", userID, "error", err)
+	}
+
+	// 2. 短暂延迟确保消息发送
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. 发送 WebSocket Close 消息
+	if err := conn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason)); err != nil {
+		slog.Debug("failed to send close message", "user_id", userID, "error", err)
+	}
+	conn.Close()
+
+	slog.Info("user disconnected by session invalidate",
+		"user_id", userID, "reason", reason)
+}
