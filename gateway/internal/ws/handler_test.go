@@ -5,6 +5,93 @@ import (
 	"time"
 )
 
+// TestClientMeta_UserIDField verifies that clientMeta struct has userID field
+// and can store/retrieve user ID values correctly.
+func TestClientMeta_UserIDField(t *testing.T) {
+	meta := &clientMeta{
+		connID:          1,
+		clientID:        "test-client",
+		isAuthenticated: false,
+		userID:          0, // default, not authenticated
+	}
+
+	// Verify initial state
+	if meta.userID != 0 {
+		t.Errorf("expected initial userID to be 0, got %d", meta.userID)
+	}
+
+	// After successful authentication, userID should be set
+	meta.userID = 12345
+	if meta.userID != 12345 {
+		t.Errorf("expected userID to be 12345, got %d", meta.userID)
+	}
+}
+
+// TestExtractUserIDFromResponse tests the extraction of user_id from
+// response data map (parsed from JSON).
+func TestExtractUserIDFromResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     interface{}
+		expected int64
+	}{
+		{
+			name:     "nil data",
+			data:     nil,
+			expected: 0,
+		},
+		{
+			name:     "non-map data",
+			data:     "string",
+			expected: 0,
+		},
+		{
+			name:     "map without user_id",
+			data:     map[string]interface{}{"success": true},
+			expected: 0,
+		},
+		{
+			name:     "map with float64 user_id (JSON unmarshal default)",
+			data:     map[string]interface{}{"success": true, "user_id": float64(12345)},
+			expected: 12345,
+		},
+		{
+			name:     "map with int user_id",
+			data:     map[string]interface{}{"success": true, "user_id": 67890},
+			expected: 67890,
+		},
+		{
+			name:     "map with int64 user_id",
+			data:     map[string]interface{}{"success": true, "user_id": int64(99999)},
+			expected: 99999,
+		},
+		{
+			name:     "map with uint64 user_id",
+			data:     map[string]interface{}{"success": true, "user_id": uint64(88888)},
+			expected: 88888,
+		},
+		{
+			name:     "map with string user_id (invalid)",
+			data:     map[string]interface{}{"success": true, "user_id": "not-a-number"},
+			expected: 0,
+		},
+		{
+			name:     "map with zero user_id",
+			data:     map[string]interface{}{"success": true, "user_id": float64(0)},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractUserIDFromResponse(tt.data)
+			if result != tt.expected {
+				t.Errorf("extractUserIDFromResponse(%v) = %d, want %d", tt.data, result, tt.expected)
+			}
+		})
+	}
+}
+
 // TestConnectionManager_RecordActivity tests that RecordActivity updates
 // the lastActivity timestamp when called through ConnectionManager.
 // This simulates the behavior when handler.go receives a Ping message
