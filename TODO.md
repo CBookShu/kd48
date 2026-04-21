@@ -156,7 +156,25 @@ go build ./services/lobby/...
 
 ---
 
+## 待处理
+
 ### 中优先级
+
+#### P1: Config-Loader Go 代码生成优化 ⏱️ 0.5天
+- [ ] 包名从 ConfigName 推导（每个配置独立包）
+- [ ] 输出目录按配置名组织（如 `generated/checkin/`, `generated/reward/`）
+- [ ] TimeFormat 每包独立定义，避免全局常量冲突
+
+#### P1: Config-Loader Lobby 接入设计 ⏱️ 1天
+- [ ] 设计生成代码放置位置（services/lobby/internal/config/generated/?）
+- [ ] 设计启动时加载所有配置的方式
+- [ ] 设计运行时热更新与生成的 struct 集成
+
+**说明**: 当前生成的 Go 代码包名固定为 lobbyconfig，全局 TimeFormat 会导致多配置冲突。Lobby 接入方式需补充设计。
+
+---
+
+### 已完成
 
 #### P1: 网关多服务验证 ⏱️ 1-2天
 - [ ] 测试同时运行 User 和 Lobby 服务
