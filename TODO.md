@@ -1,6 +1,32 @@
 # kd48 TODO
 
-> 最后更新: 2026-04-20
+> 最后更新: 2026-04-21
+
+---
+
+## 已完成
+
+### Config-Loader 打表工具 (2026-04-21)
+
+- [x] CSV 解析器（三行头格式）
+- [x] 类型解析（int32, int64, string, time, arrays, maps）
+- [x] 数据校验（snake_case 列名、重复检测）
+- [x] JSON payload 生成
+- [x] MySQL 写入器
+- [x] Redis 通知发布器
+- [x] Go struct 代码生成（含 ConfigTime 类型）
+- [x] 管道执行器
+- [x] CLI 主程序
+
+**相关文件**:
+- `tools/config-loader/` - 完整工具实现
+- `tools/config-loader/testdata/example.csv` - 示例 CSV
+
+**验证命令**:
+```bash
+cd tools/config-loader && go test ./... -v
+go build ./cmd/config-loader
+```
 
 ---
 
@@ -130,7 +156,25 @@ go build ./services/lobby/...
 
 ---
 
+## 待处理
+
 ### 中优先级
+
+#### P1: Config-Loader Go 代码生成优化 ⏱️ 0.5天
+- [ ] 包名从 ConfigName 推导（每个配置独立包）
+- [ ] 输出目录按配置名组织（如 `generated/checkin/`, `generated/reward/`）
+- [ ] TimeFormat 每包独立定义，避免全局常量冲突
+
+#### P1: Config-Loader Lobby 接入设计 ⏱️ 1天
+- [ ] 设计生成代码放置位置（services/lobby/internal/config/generated/?）
+- [ ] 设计启动时加载所有配置的方式
+- [ ] 设计运行时热更新与生成的 struct 集成
+
+**说明**: 当前生成的 Go 代码包名固定为 lobbyconfig，全局 TimeFormat 会导致多配置冲突。Lobby 接入方式需补充设计。
+
+---
+
+### 已完成
 
 #### P1: 网关多服务验证 ⏱️ 1-2天
 - [ ] 测试同时运行 User 和 Lobby 服务

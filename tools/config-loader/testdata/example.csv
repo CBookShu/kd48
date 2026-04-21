@@ -1,0 +1,4 @@
+奖励说明,数量,int64数量,标签,开始时间,int64数组,分数映射,配置映射,玩家得分,玩家金币,奖励映射
+note,amount,amount64,tags,start_time,int64_scores,score_config,config_setting,player_scores,player_coins,reward_map
+string,int32,int64,string[],time,int64[],int32=string,string=string,string=int32,string=int64,string=string
+首登奖,10,100000,'vip'|'hot',2026-04-15 10:00:00,1|2|3,'100'='first'|'200'='second',debug=true|version='1.0','alice'=10|'bob'=20,'player1'=1000|'player2'=2000,'login'='100金币'|'share'='50金币'
