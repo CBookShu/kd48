@@ -20,6 +20,7 @@ message LoginRequest {
 message LoginReply {
   bool success = 1;
   string token = 2; // 模拟返回的 token
+  uint64 user_id = 3; // 新增：用户ID，网关需要用于顶号映射
 }
 
 message RegisterRequest {
@@ -30,4 +31,5 @@ message RegisterRequest {
 message RegisterReply {
   bool success = 1;
   string token = 2;
+  uint64 user_id = 3; // 新增：用户ID
 }
