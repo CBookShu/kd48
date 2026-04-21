@@ -117,6 +117,20 @@ func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, use
 	return token, hasOldToken, nil
 }
 
+// publishSessionInvalidate 发布 Session 失效通知
+func (s *userService) publishSessionInvalidate(ctx context.Context, userID uint64) {
+	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to resolve redis for publish", "error", err)
+		return
+	}
+
+	notifyData := fmt.Sprintf(`{"user_id":%d}`, userID)
+	if err := rdb.Publish(ctx, "kd48:session:invalidate", notifyData).Err(); err != nil {
+		slog.WarnContext(ctx, "Failed to publish session invalidate", "error", err)
+	}
+}
+
 func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
 	slog.InfoContext(ctx, "Received Login request", "username", req.Username)
 
@@ -140,9 +154,13 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 		return nil, status.Error(codes.Unauthenticated, "invalid username or password")
 	}
 
-	token, err := s.issueSession(ctx, user.ID, user.Username)
+	token, hasOldToken, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
 	if err != nil {
 		return nil, err
+	}
+
+	if hasOldToken {
+		s.publishSessionInvalidate(ctx, user.ID)
 	}
 
 	slog.InfoContext(ctx, "User logged in successfully", "username", user.Username)
@@ -150,6 +168,7 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 	return &userv1.LoginReply{
 		Success: true,
 		Token:   token,
+		UserId:  user.ID,
 	}, nil
 }
 
@@ -193,7 +212,7 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 
-	token, err := s.issueSession(ctx, user.ID, user.Username)
+	token, _, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -203,5 +222,6 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 	return &userv1.RegisterReply{
 		Success: true,
 		Token:   token,
+		UserId:  user.ID,
 	}, nil
 }
