@@ -1,6 +1,32 @@
 # kd48 TODO
 
-> 最后更新: 2026-04-20
+> 最后更新: 2026-04-21
+
+---
+
+## 已完成
+
+### Config-Loader 打表工具 (2026-04-21)
+
+- [x] CSV 解析器（三行头格式）
+- [x] 类型解析（int32, int64, string, time, arrays, maps）
+- [x] 数据校验（snake_case 列名、重复检测）
+- [x] JSON payload 生成
+- [x] MySQL 写入器
+- [x] Redis 通知发布器
+- [x] Go struct 代码生成（含 ConfigTime 类型）
+- [x] 管道执行器
+- [x] CLI 主程序
+
+**相关文件**:
+- `tools/config-loader/` - 完整工具实现
+- `tools/config-loader/testdata/example.csv` - 示例 CSV
+
+**验证命令**:
+```bash
+cd tools/config-loader && go test ./... -v
+go build ./cmd/config-loader
+```
 
 ---
 
