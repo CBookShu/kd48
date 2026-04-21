@@ -128,6 +128,119 @@ func (x *GatewayRouteSpec) GetEstablishesSession() bool {
 	return false
 }
 
+// 心跳检测协议
+type HeartbeatRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp     int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatRequest) Reset() {
+	*x = HeartbeatRequest{}
+	mi := &file_gateway_v1_gateway_route_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatRequest) ProtoMessage() {}
+
+func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gateway_v1_gateway_route_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
+	return file_gateway_v1_gateway_route_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HeartbeatRequest) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *HeartbeatRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type HeartbeatResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp     int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	ServerTime    int64                  `protobuf:"varint,2,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
+	Healthy       bool                   `protobuf:"varint,3,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatResponse) Reset() {
+	*x = HeartbeatResponse{}
+	mi := &file_gateway_v1_gateway_route_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatResponse) ProtoMessage() {}
+
+func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_gateway_v1_gateway_route_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
+	return file_gateway_v1_gateway_route_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *HeartbeatResponse) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *HeartbeatResponse) GetServerTime() int64 {
+	if x != nil {
+		return x.ServerTime
+	}
+	return 0
+}
+
+func (x *HeartbeatResponse) GetHealthy() bool {
+	if x != nil {
+		return x.Healthy
+	}
+	return false
+}
+
 var File_gateway_v1_gateway_route_proto protoreflect.FileDescriptor
 
 const file_gateway_v1_gateway_route_proto_rawDesc = "" +
@@ -142,7 +255,15 @@ const file_gateway_v1_gateway_route_proto_rawDesc = "" +
 	"\ringress_route\x18\x05 \x01(\tR\fingressRoute\x12\x16\n" +
 	"\x06public\x18\x06 \x01(\bR\x06public\x12!\n" +
 	"\fdisplay_name\x18\a \x01(\tR\vdisplayName\x12/\n" +
-	"\x13establishes_session\x18\b \x01(\bR\x12establishesSessionB9Z7github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1b\x06proto3"
+	"\x13establishes_session\x18\b \x01(\bR\x12establishesSession\"M\n" +
+	"\x10HeartbeatRequest\x12\x1c\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"l\n" +
+	"\x11HeartbeatResponse\x12\x1c\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12\x1f\n" +
+	"\vserver_time\x18\x02 \x01(\x03R\n" +
+	"serverTime\x12\x18\n" +
+	"\ahealthy\x18\x03 \x01(\bR\ahealthyB9Z7github.com/CBookShu/kd48/api/proto/gateway/v1;gatewayv1b\x06proto3"
 
 var (
 	file_gateway_v1_gateway_route_proto_rawDescOnce sync.Once
@@ -156,9 +277,11 @@ func file_gateway_v1_gateway_route_proto_rawDescGZIP() []byte {
 	return file_gateway_v1_gateway_route_proto_rawDescData
 }
 
-var file_gateway_v1_gateway_route_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_gateway_v1_gateway_route_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_gateway_v1_gateway_route_proto_goTypes = []any{
-	(*GatewayRouteSpec)(nil), // 0: gateway.v1.GatewayRouteSpec
+	(*GatewayRouteSpec)(nil),  // 0: gateway.v1.GatewayRouteSpec
+	(*HeartbeatRequest)(nil),  // 1: gateway.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil), // 2: gateway.v1.HeartbeatResponse
 }
 var file_gateway_v1_gateway_route_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -179,7 +302,7 @@ func file_gateway_v1_gateway_route_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gateway_v1_gateway_route_proto_rawDesc), len(file_gateway_v1_gateway_route_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
