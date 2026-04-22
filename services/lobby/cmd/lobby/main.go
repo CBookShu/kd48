@@ -18,6 +18,7 @@ import (
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"github.com/CBookShu/kd48/services/lobby/internal/config"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -120,6 +121,20 @@ func main() {
 		panic(err)
 	}
 	defer etcdCli.Close()
+
+	// 初始化配置加载器
+	configLoader := config.NewConfigLoader(mysqlPools["default"], config.GetStore())
+
+	// 启动时加载所有配置
+	if err := configLoader.LoadAll(context.Background()); err != nil {
+		slog.Error("failed to load configs", "error", err)
+		// 不 panic，允许部分配置加载失败
+	}
+	slog.Info("configs loaded")
+
+	// 启动配置热更新订阅
+	configWatcher := config.NewConfigWatcher(redisPools["default"].(*redis.Client), configLoader, config.ConfigNotifyChannel)
+	go configWatcher.Start(context.Background())
 
 	// 启动 gRPC Server
 	// 从配置读取端口，默认 9001
