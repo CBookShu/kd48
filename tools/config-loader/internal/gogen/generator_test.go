@@ -62,3 +62,55 @@ func TestGenerator_Generate_ConfigTime(t *testing.T) {
 		t.Error("generated code should contain UnmarshalJSON method")
 	}
 }
+
+func TestGenerate_PackageStruct(t *testing.T) {
+	g := NewGenerator()
+
+	sheet := &csvparser.Sheet{
+		ConfigName: "test_config",
+		Headers: []csvparser.ColumnHeader{
+			{Name: "id", Type: "int32"},
+			{Name: "name", Type: "string"},
+		},
+	}
+
+	code, err := g.Generate(sheet, "testconfig")
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	// 检查 Package 结构体
+	if !strings.Contains(code, "type Package struct") {
+		t.Error("generated code missing Package struct")
+	}
+
+	// 检查 ConfigName 方法
+	if !strings.Contains(code, "func (p *Package) ConfigName() string") {
+		t.Error("generated code missing ConfigName method")
+	}
+
+	// 检查 ConfigData 方法
+	if !strings.Contains(code, "func (p *Package) ConfigData() any") {
+		t.Error("generated code missing ConfigData method")
+	}
+
+	// 检查 Store 变量
+	if !strings.Contains(code, "var Store *") {
+		t.Error("generated code missing Store variable")
+	}
+
+	// 检查 init 函数
+	if !strings.Contains(code, "func init()") {
+		t.Error("generated code missing init function")
+	}
+
+	// 检查 baseconfig 导入
+	if !strings.Contains(code, `baseconfig "github.com/CBookShu/kd48/pkg/config"`) {
+		t.Error("generated code missing baseconfig import")
+	}
+
+	// 检查 lobbyconfig 导入
+	if !strings.Contains(code, `lobbyconfig "github.com/CBookShu/kd48/services/lobby/internal/config"`) {
+		t.Error("generated code missing lobbyconfig import")
+	}
+}
