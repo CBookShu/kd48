@@ -71,12 +71,15 @@ func TestIssueSessionAtomic_NewUser(t *testing.T) {
 	router := createMockRouterWithRedis(t, rdb)
 	svc := NewUserService(router, 1*time.Hour)
 
-	token, _, err := svc.issueSessionAtomic(context.Background(), 123, "alice")
+	token, hasOldToken, err := svc.issueSessionAtomic(context.Background(), 123, "alice")
 	if err != nil {
 		t.Fatalf("issueSessionAtomic: %v", err)
 	}
 	if token == "" {
 		t.Error("token should not be empty")
+	}
+	if hasOldToken {
+		t.Error("hasOldToken should be false for new user")
 	}
 
 	// 验证双向映射
@@ -111,9 +114,12 @@ func TestIssueSessionAtomic_KickOldSession(t *testing.T) {
 	svc := NewUserService(router, 1*time.Hour)
 
 	// 第一次登录
-	token1, _, err := svc.issueSessionAtomic(context.Background(), 123, "alice")
+	token1, hasOldToken1, err := svc.issueSessionAtomic(context.Background(), 123, "alice")
 	if err != nil {
 		t.Fatalf("first login: %v", err)
+	}
+	if hasOldToken1 {
+		t.Error("hasOldToken should be false for first login")
 	}
 
 	// 验证旧 session 存在
