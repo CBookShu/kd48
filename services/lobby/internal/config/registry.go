@@ -1,6 +1,7 @@
 package config
 
 import (
+	"sort"
 	"sync"
 
 	baseconfig "github.com/CBookShu/kd48/pkg/config"
@@ -50,6 +51,7 @@ func (cs *ConfigStore) GetRegisteredNames() []string {
 	for name := range cs.stores {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
