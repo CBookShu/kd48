@@ -13,11 +13,12 @@ import (
 // 负责连接注册、心跳监控、超时断开
 
 type ConnectionManager struct {
-	heartbeat      *HeartbeatManager
-	connections    map[string]*websocket.Conn
-	connMu         sync.RWMutex
-	stopCh         chan struct{}
-	metrics        ConnectionMetrics
+	heartbeat       *HeartbeatManager
+	connections     map[string]*websocket.Conn // clientID → conn
+	userConnections map[int64]string           // userID → clientID
+	connMu          sync.RWMutex
+	stopCh          chan struct{}
+	metrics         ConnectionMetrics
 }
 
 // ConnectionMetrics 连接统计指标
@@ -31,10 +32,11 @@ type ConnectionMetrics struct {
 // NewConnectionManager 创建连接管理器
 func NewConnectionManager(hbConfig HeartbeatConfig) *ConnectionManager {
 	return &ConnectionManager{
-		heartbeat:   NewHeartbeatManager(hbConfig),
-		connections: make(map[string]*websocket.Conn),
-		stopCh:      make(chan struct{}),
-		metrics:     ConnectionMetrics{},
+		heartbeat:       NewHeartbeatManager(hbConfig),
+		connections:     make(map[string]*websocket.Conn),
+		userConnections: make(map[int64]string),
+		stopCh:          make(chan struct{}),
+		metrics:         ConnectionMetrics{},
 	}
 }
 
@@ -83,6 +85,14 @@ func (cm *ConnectionManager) UnregisterConnection(clientID string) {
 
 		if cm.metrics.ActiveConnections < 0 {
 			cm.metrics.ActiveConnections = 0
+		}
+
+		// Also clean up userConnections (find userID by clientID)
+		for uid, cid := range cm.userConnections {
+			if cid == clientID {
+				delete(cm.userConnections, uid)
+				break
+			}
 		}
 
 		slog.Info("connection unregistered",
@@ -222,4 +232,74 @@ func (cm *ConnectionManager) GetActiveConnectionCount() int {
 	cm.connMu.RLock()
 	defer cm.connMu.RUnlock()
 	return len(cm.connections)
+}
+
+// RegisterUserConnection 登录成功后关联 userID 与 clientID
+func (cm *ConnectionManager) RegisterUserConnection(userID int64, clientID string) {
+	cm.connMu.Lock()
+	defer cm.connMu.Unlock()
+	cm.userConnections[userID] = clientID
+	slog.Debug("user connection registered", "user_id", userID, "client_id", clientID)
+}
+
+// GetUserClientID 根据 userID 查找 clientID
+func (cm *ConnectionManager) GetUserClientID(userID int64) (string, bool) {
+	cm.connMu.RLock()
+	defer cm.connMu.RUnlock()
+	clientID, exists := cm.userConnections[userID]
+	return clientID, exists
+}
+
+// DisconnectByUserID 按 userID 断开连接（顶号时调用）
+func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
+	cm.connMu.Lock()
+	clientID, exists := cm.userConnections[userID]
+	if !exists {
+		cm.connMu.Unlock()
+		return // 该网关实例没有这个用户的连接
+	}
+
+	conn, connExists := cm.connections[clientID]
+	if !connExists || conn == nil {
+		// 没有实际连接，只清理映射
+		delete(cm.connections, clientID)
+		delete(cm.userConnections, userID)
+		cm.metrics.ActiveConnections--
+		cm.metrics.DisconnectedCount++
+		if cm.metrics.ActiveConnections < 0 {
+			cm.metrics.ActiveConnections = 0
+		}
+		cm.connMu.Unlock()
+		return
+	}
+
+	// 从 maps 中移除，这样在发送消息时不会被其他操作干扰
+	delete(cm.connections, clientID)
+	delete(cm.userConnections, userID)
+	cm.metrics.ActiveConnections--
+	cm.metrics.DisconnectedCount++
+	if cm.metrics.ActiveConnections < 0 {
+		cm.metrics.ActiveConnections = 0
+	}
+	cm.connMu.Unlock()
+
+	// 现在不持有锁，安全地进行 WebSocket 操作
+	// 1. 先发送业务消息（让客户端显示友好提示）
+	kickMsg := `{"method":"session_kicked","code":1008,"msg":"session replaced"}`
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(kickMsg)); err != nil {
+		slog.Debug("failed to send kick message", "user_id", userID, "error", err)
+	}
+
+	// 2. 短暂延迟确保消息发送
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. 发送 WebSocket Close 消息
+	if err := conn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason)); err != nil {
+		slog.Debug("failed to send close message", "user_id", userID, "error", err)
+	}
+	conn.Close()
+
+	slog.Info("user disconnected by session invalidate",
+		"user_id", userID, "reason", reason)
 }

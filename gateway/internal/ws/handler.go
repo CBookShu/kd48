@@ -156,10 +156,6 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 			continue
 		}
 
-		if route.EstablishSession {
-			meta.isAuthenticated = true
-		}
-
 		// 6. 成功响应：与 response_data.go 单测对齐的转换逻辑
 		data, convErr := DataFromWsHandlerResult(resp)
 		if convErr != nil {
@@ -171,6 +167,22 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 		}
 
 		h.sendResp(ctx, conn, req.Method, int32(codes.OK), "success", data)
+
+		// 7. 登录成功后提取 user_id 并注册用户连接映射（用于顶号踢人）
+		if route.EstablishSession {
+			meta.isAuthenticated = true
+
+			// 从响应数据中提取 user_id
+			userID := extractUserIDFromResponse(data)
+			if userID > 0 {
+				meta.userID = userID
+				if h.connManager != nil {
+					h.connManager.RegisterUserConnection(userID, clientID)
+					slog.InfoContext(ctx, "User connection registered",
+						"user_id", userID, "client_id", clientID)
+				}
+			}
+		}
 
 		// 记录客户端活动（用于空闲检测）
 		if h.connManager != nil && meta.clientID != "" {
@@ -195,3 +207,41 @@ func (h *Handler) sendResp(ctx context.Context, conn *websocket.Conn, method str
 
 // 注意：需要保留一个空引入，让编译器知道我们用到了标准库的 StatusCodes
 var _ = http.StatusOK
+
+// extractUserIDFromResponse 从响应数据中提取 user_id 字段
+// JSON unmarshaling 默认将数字解析为 float64，需要处理多种数值类型
+func extractUserIDFromResponse(data interface{}) int64 {
+	if data == nil {
+		return 0
+	}
+
+	m, ok := data.(map[string]interface{})
+	if !ok {
+		return 0
+	}
+
+	userIDVal, exists := m["user_id"]
+	if !exists {
+		return 0
+	}
+
+	switch v := userIDVal.(type) {
+	case float64:
+		// JSON unmarshal 默认将数字解析为 float64
+		return int64(v)
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case uint64:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case uint32:
+		return int64(v)
+	case float32:
+		return int64(v)
+	default:
+		return 0
+	}
+}

@@ -218,3 +218,131 @@ func TestConnectionManager_HeartbeatTimeout(t *testing.T) {
 		t.Error("should indicate disconnect after second timeout check (MaxMissed=2, missedCount=2)")
 	}
 }
+
+func TestConnectionManager_RegisterUserConnection(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	clientID := "conn-123"
+	userID := int64(456)
+
+	// 先注册连接
+	cm.RegisterConnection(clientID, nil)
+
+	// 关联 userID
+	cm.RegisterUserConnection(userID, clientID)
+
+	// 验证可以通过 userID 找到 clientID
+	foundClientID, exists := cm.GetUserClientID(userID)
+	if !exists {
+		t.Error("user connection should exist")
+	}
+	if foundClientID != clientID {
+		t.Errorf("foundClientID = %q, want %q", foundClientID, clientID)
+	}
+}
+
+func TestConnectionManager_RegisterUserConnection_Replace(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	cm.RegisterConnection("conn-1", nil)
+	cm.RegisterConnection("conn-2", nil)
+
+	userID := int64(100)
+
+	// 第一次关联
+	cm.RegisterUserConnection(userID, "conn-1")
+	found1, _ := cm.GetUserClientID(userID)
+	if found1 != "conn-1" {
+		t.Errorf("first association failed")
+	}
+
+	// 第二次关联（替换）
+	cm.RegisterUserConnection(userID, "conn-2")
+	found2, _ := cm.GetUserClientID(userID)
+	if found2 != "conn-2" {
+		t.Errorf("second association should replace first, got %q", found2)
+	}
+}
+
+func TestConnectionManager_UnregisterConnection_CleansUserMapping(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	clientID := "conn-123"
+	userID := int64(456)
+
+	cm.RegisterConnection(clientID, nil)
+	cm.RegisterUserConnection(userID, clientID)
+
+	// Unregister should also clean up userConnections
+	cm.UnregisterConnection(clientID)
+
+	// Verify user mapping is gone
+	_, exists := cm.GetUserClientID(userID)
+	if exists {
+		t.Error("user connection mapping should be removed when connection unregisters")
+	}
+}
+
+func TestConnectionManager_DisconnectByUserID(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	clientID := "conn-123"
+	userID := int64(456)
+
+	cm.RegisterConnection(clientID, nil)
+	cm.RegisterUserConnection(userID, clientID)
+
+	// 断开用户连接
+	cm.DisconnectByUserID(userID, "session replaced")
+
+	// 验证连接被清理
+	_, connExists := cm.GetConnection(clientID)
+	if connExists {
+		t.Error("connection should be removed")
+	}
+
+	_, userExists := cm.GetUserClientID(userID)
+	if userExists {
+		t.Error("user connection mapping should be removed")
+	}
+
+	metrics := cm.GetMetrics()
+	if metrics.ActiveConnections != 0 {
+		t.Errorf("active connections should be 0, got %d", metrics.ActiveConnections)
+	}
+	if metrics.DisconnectedCount != 1 {
+		t.Errorf("disconnected count should be 1, got %d", metrics.DisconnectedCount)
+	}
+}
+
+func TestConnectionManager_DisconnectByUserID_NotExist(t *testing.T) {
+	cm := NewConnectionManager(HeartbeatConfig{
+		Interval:  30 * time.Second,
+		Timeout:   10 * time.Second,
+		MaxMissed: 3,
+	})
+
+	// 断开不存在的用户（不应出错）
+	cm.DisconnectByUserID(999, "session replaced")
+
+	metrics := cm.GetMetrics()
+	if metrics.DisconnectedCount != 0 {
+		t.Errorf("disconnected count should be 0 for non-existent user")
+	}
+}
