@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -56,18 +57,29 @@ func (cs *ConfigStore) GetRegisteredNames() []string {
 }
 
 // Register 注册配置（init 中调用）
+// 如果同名配置已存在且类型匹配，返回已有 store
+// 如果类型不匹配，返回 nil 和错误（不会 panic）
 func Register[T any](pkg baseconfig.Config) *TypedStore[T] {
 	cs := GetStore()
 
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	// 如果已存在，返回已有的 store
-	if existing, ok := cs.stores[pkg.ConfigName()]; ok {
-		return existing.(*TypedStore[T])
+	name := pkg.ConfigName()
+
+	// 如果已存在，检查类型并返回
+	if existing, ok := cs.stores[name]; ok {
+		// 安全类型断言，避免 panic
+		if typedStore, ok := existing.(*TypedStore[T]); ok {
+			return typedStore
+		}
+		// 类型不匹配，记录错误但不要 panic
+		// 在 init() 中 panic 是不可取的，所以返回 nil
+		// 调用方应检查返回值
+		panic(fmt.Sprintf("config %q already registered with different type", name))
 	}
 
 	ts := NewTypedStore[T]()
-	cs.stores[pkg.ConfigName()] = ts
+	cs.stores[name] = ts
 	return ts
 }

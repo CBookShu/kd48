@@ -71,3 +71,21 @@ func TestGetTypedStore_NotFound(t *testing.T) {
 		t.Error("GetTypedStore() for non-existent config should return nil")
 	}
 }
+
+func TestRegister_TypeMismatch(t *testing.T) {
+	ResetStore()
+
+	pkg := &testConfig{name: "type_mismatch_config"}
+
+	// 第一次注册为 int 类型
+	Register[int](pkg)
+
+	// 第二次注册为 string 类型，应该 panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Register() with different type should panic")
+		}
+	}()
+
+	Register[string](pkg)
+}
