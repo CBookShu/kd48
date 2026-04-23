@@ -1,8 +1,10 @@
 // seed-gateway-meta 向 Etcd 写入网关 Bootstrap 所需的最小 ServiceType + GatewayRoute（开发用）。
+// 同时初始化数据源路由配置（MySQL/Redis routing rules）。
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -105,5 +108,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("ok: kd48/meta/service-types/user + gateway-routes/login + register")
+	// 初始化数据源路由配置（catch-all fallback to "default"）
+	mysqlRoutes := []dsroute.RouteRule{
+		{Prefix: "", Pool: "default"}, // catch-all: 未匹配的 routing key 使用 default pool
+	}
+	redisRoutes := []dsroute.RouteRule{
+		{Prefix: "", Pool: "default"}, // catch-all: 未匹配的 routing key 使用 default pool
+	}
+
+	mysqlRoutesJSON, err := json.Marshal(mysqlRoutes)
+	if err != nil {
+		slog.Error("marshal mysql routes", "error", err)
+		os.Exit(1)
+	}
+	redisRoutesJSON, err := json.Marshal(redisRoutes)
+	if err != nil {
+		slog.Error("marshal redis routes", "error", err)
+		os.Exit(1)
+	}
+
+	_, err = cli.Put(ctx, "kd48/routing/mysql_routes", string(mysqlRoutesJSON))
+	if err != nil {
+		slog.Error("put mysql routes", "error", err)
+		os.Exit(1)
+	}
+	_, err = cli.Put(ctx, "kd48/routing/redis_routes", string(redisRoutesJSON))
+	if err != nil {
+		slog.Error("put redis routes", "error", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("ok: service-types/user + gateway-routes/login+register + routing/mysql_routes+redis_routes")
 }
