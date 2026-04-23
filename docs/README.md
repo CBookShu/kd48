@@ -20,4 +20,25 @@
 | [superpowers/plans/2026-04-15-lobby-service-implementation-plan.md](./superpowers/plans/2026-04-15-lobby-service-implementation-plan.md) | **Lobby** 实现计划：**CSV/`json_payload`/打表** 见 [专项规格](./superpowers/specs/2026-04-16-lobby-config-csv-and-tooling-spec.md)；MySQL **`scope`/`title`/`tags`/`start_time`/`end_time`**（**§C**）；**§C.1 `config_name` 命名**；proto、迁移、bootstrap、**Redis**、Ingress、Task 7 |
 | [superpowers/plans/2026-04-18-datasource-routing-implementation-plan.md](./superpowers/plans/2026-04-18-datasource-routing-implementation-plan.md) | **`routing_key` + LPM** 路由：`pkg/dsroute`、启动校验、User 接入；依据 [数据源路由规格](./superpowers/specs/2026-04-17-datasource-routing-and-pools.md) **§11** |
 
+## 部署工具
+
+### seed-gateway-meta
+
+`gateway/cmd/seed-gateway-meta` 用于部署时向 Etcd 写入初始化元数据：
+
+```bash
+./seed-gateway-meta.bin -endpoints=<etcd地址>
+```
+
+**写入内容**：
+
+| Key | 用途 |
+|-----|------|
+| `kd48/meta/service-types/*` | 服务类型定义（user 等） |
+| `kd48/meta/gateway-routes/*` | WebSocket 路由规则（login、register 等） |
+| `kd48/routing/mysql_routes` | MySQL 数据源路由规则（catch-all → default） |
+| `kd48/routing/redis_routes` | Redis 数据源路由规则（catch-all → default） |
+
+**数据源路由说明**：使用空 prefix 的 catch-all 规则，所有未匹配具体路由的 routing key 都会 fallback 到 "default" 连接池。详见 [AGENTS.md](../AGENTS.md) 数据源访问规范。
+
 后续可在本表追加：部署规范、配置与染色专题、各服务边界说明等。

@@ -16,3 +16,7 @@ go -C "$ROOT/services/user" build -o "$ROOT/user.bin" ./cmd/user
 echo "构建 lobby"
 # 构建 lobby
 go -C "$ROOT/services/lobby" build -o "$ROOT/lobby.bin" ./cmd/lobby
+
+echo "构建 seed-gateway-meta"
+# 构建 seed-gateway-meta（部署时写入 Etcd 元数据）
+go -C "$ROOT/gateway" build -o "$ROOT/seed-gateway-meta.bin" ./cmd/seed-gateway-meta
