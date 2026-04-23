@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -13,23 +14,39 @@ const ConfigNotifyChannel = "kd48:lobby:config:notify"
 
 // ConfigWatcher 订阅 Redis Pub/Sub 实现热更新
 type ConfigWatcher struct {
-	rdb     *redis.Client
-	loader  *ConfigLoader
-	channel string
+	router     *dsroute.Router
+	routingKey string
+	loader     *ConfigLoader
+	channel    string
 }
 
 // NewConfigWatcher 创建订阅器
-func NewConfigWatcher(rdb *redis.Client, loader *ConfigLoader, channel string) *ConfigWatcher {
+func NewConfigWatcher(router *dsroute.Router, routingKey string, loader *ConfigLoader, channel string) *ConfigWatcher {
 	return &ConfigWatcher{
-		rdb:     rdb,
-		loader:  loader,
-		channel: channel,
+		router:     router,
+		routingKey: routingKey,
+		loader:     loader,
+		channel:    channel,
 	}
 }
 
 // Start 启动订阅
 func (w *ConfigWatcher) Start(ctx context.Context) {
-	pubsub := w.rdb.Subscribe(ctx, w.channel)
+	// 通过 Router 解析 Redis 连接
+	rdb, poolName, err := w.router.ResolveRedis(ctx, w.routingKey)
+	if err != nil {
+		slog.Error("failed to resolve redis for config watcher", "error", err, "routingKey", w.routingKey)
+		return
+	}
+
+	// 转换为 *redis.Client（Pub/Sub 需要具体类型）
+	client, ok := rdb.(*redis.Client)
+	if !ok {
+		slog.Error("resolved redis is not a *redis.Client", "pool", poolName)
+		return
+	}
+
+	pubsub := client.Subscribe(ctx, w.channel)
 	defer pubsub.Close()
 
 	// 检查订阅是否成功
@@ -38,7 +55,7 @@ func (w *ConfigWatcher) Start(ctx context.Context) {
 		return
 	}
 
-	slog.Info("config watcher started", "channel", w.channel)
+	slog.Info("config watcher started", "channel", w.channel, "pool", poolName)
 
 	ch := pubsub.Channel()
 	for {

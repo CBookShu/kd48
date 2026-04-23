@@ -2,13 +2,36 @@ package config
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
+
+const testWatcherRoutingKey = "lobby:config-notify"
+
+// newTestWatcherRouter 创建测试用 Router，包含 mock 数据库和 miniredis
+func newTestWatcherRouter(t *testing.T, db *sql.DB, rdb *redis.Client) *dsroute.Router {
+	mysqlPools := map[string]*sql.DB{"default": db}
+	redisPools := map[string]redis.UniversalClient{"default": rdb}
+
+	mysqlRoutes := []dsroute.RouteRule{
+		{Prefix: testRoutingKey, Pool: "default"},
+	}
+	redisRoutes := []dsroute.RouteRule{
+		{Prefix: testWatcherRoutingKey, Pool: "default"},
+	}
+
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	if err != nil {
+		t.Fatalf("failed to create test router: %v", err)
+	}
+	return router
+}
 
 func TestWatcher_ValidMessage(t *testing.T) {
 	ResetStore()
@@ -40,9 +63,9 @@ func TestWatcher_ValidMessage(t *testing.T) {
 		WithArgs("test_config").
 		WillReturnRows(rows)
 
-	router := newTestRouter(t, db)
+	router := newTestWatcherRouter(t, db, rdb)
 	loader := NewConfigLoader(router, testRoutingKey, GetStore())
-	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
+	watcher := NewConfigWatcher(router, testWatcherRoutingKey, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -94,9 +117,9 @@ func TestWatcher_InvalidJSON(t *testing.T) {
 	}
 	defer db.Close()
 
-	router := newTestRouter(t, db)
+	router := newTestWatcherRouter(t, db, rdb)
 	loader := NewConfigLoader(router, testRoutingKey, GetStore())
-	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
+	watcher := NewConfigWatcher(router, testWatcherRoutingKey, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -132,9 +155,9 @@ func TestWatcher_MissingField(t *testing.T) {
 	}
 	defer db.Close()
 
-	router := newTestRouter(t, db)
+	router := newTestWatcherRouter(t, db, rdb)
 	loader := NewConfigLoader(router, testRoutingKey, GetStore())
-	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
+	watcher := NewConfigWatcher(router, testWatcherRoutingKey, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -170,9 +193,9 @@ func TestWatcher_ContextCancel(t *testing.T) {
 	}
 	defer db.Close()
 
-	router := newTestRouter(t, db)
+	router := newTestWatcherRouter(t, db, rdb)
 	loader := NewConfigLoader(router, testRoutingKey, GetStore())
-	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
+	watcher := NewConfigWatcher(router, testWatcherRoutingKey, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
