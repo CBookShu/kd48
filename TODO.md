@@ -1,6 +1,6 @@
 # kd48 TODO
 
-> 最后更新: 2026-04-21
+> 最后更新: 2026-04-23
 
 ---
 
@@ -139,20 +139,34 @@ go build ./services/lobby/...
 
 ### 高优先级
 
-#### P0: 顶号/踢人机制 ⏱️ 3-4天
-- [ ] 明确产品策略（单终端 vs 多终端）
-- [ ] 实现Redis会话管理和强制断开
-- [ ] 添加管理API（运营踢人）
-- [ ] 重复登录检测与旧连接断开
+#### P0: 顶号/踢人机制 🟢 基本完成
 
-**说明**: 会话基础已存在（`services/user/cmd/user/server.go` 的 `issueSession`），但强制断开逻辑待实现。
+| 组件 | 文件 | 状态 |
+|------|------|------|
+| User 服务 - Lua 原子操作 | `services/user/cmd/user/server.go` | ✅ `loginSessionLua` 双向映射原子更新 |
+| User 服务 - 发布失效通知 | `services/user/cmd/user/server.go` | ✅ 发布到 `kd48:session:invalidate` 频道 |
+| Gateway - Session 订阅器 | `gateway/internal/ws/session_subscriber.go` | ✅ 完整订阅和处理逻辑 |
+| Gateway - ConnectionManager | `gateway/internal/ws/connection_manager.go` | ✅ `DisconnectByUserID` 强制断开 |
+| Gateway - Handler 注册映射 | `gateway/internal/ws/handler.go` | ✅ 登录后调用 `RegisterUserConnection` |
 
-#### P0: Lobby 服务剩余任务
-- [ ] Task 4: 配置加载器与快照（Bootstrap + 强类型 JSON）
-- [ ] Task 5: Redis 变更通知（订阅 `kd48:lobby:config:notify`）
-- [ ] Task 6: GatewayIngress 与网关元数据种子（部分完成）
+**待完善**:
+- [ ] Ping 方法返回实际 ConfigRevision（当前硬编码为 0，需从 ConfigStore 获取）
 
-**说明**: Task 1-3 已完成（核心骨架、Proto、MySQL迁移、gRPC注册、etcd注册）。
+---
+
+#### P0: Lobby 服务 Task 4-6 🟢 已完成
+
+| Task | 状态 | 说明 |
+|------|------|------|
+| Task 4: 配置加载器 | ✅ | `services/lobby/internal/config/loader.go` - 从 MySQL 加载配置 |
+| Task 5: Redis 变更通知 | ✅ | `services/lobby/internal/config/watcher.go` - 订阅 `kd48:lobby:config:notify` |
+| Task 6: GatewayIngress | ✅ | `services/lobby/cmd/lobby/ingress.go` - 已注册 `/lobby.v1.LobbyService/Ping` |
+
+**验证命令**:
+```bash
+go test ./services/lobby/... -v
+go test ./gateway/internal/ws/... -v
+```
 
 ---
 
@@ -160,28 +174,70 @@ go build ./services/lobby/...
 
 ### 中优先级
 
-#### P1: Config-Loader Go 代码生成优化 ⏱️ 0.5天
-- [ ] 包名从 ConfigName 推导（每个配置独立包）
-- [ ] 输出目录按配置名组织（如 `generated/checkin/`, `generated/reward/`）
-- [ ] TimeFormat 每包独立定义，避免全局常量冲突
+#### P1: Config-Loader Go 代码生成优化 ✅ 已完成
 
-#### P1: Config-Loader Lobby 接入设计 ⏱️ 1天
-- [ ] 设计生成代码放置位置（services/lobby/internal/config/generated/?）
-- [ ] 设计启动时加载所有配置的方式
-- [ ] 设计运行时热更新与生成的 struct 集成
+- [x] 包名从 ConfigName 推导（每个配置独立包）- `-go-package` 参数
+- [x] 输出目录按配置名组织（如 `generated/checkin/`, `generated/reward/`）- `-go-out` 参数
+- [x] TimeFormat 每包独立定义，避免全局常量冲突
 
-**说明**: 当前生成的 Go 代码包名固定为 lobbyconfig，全局 TimeFormat 会导致多配置冲突。Lobby 接入方式需补充设计。
+**相关文件**: `tools/config-loader/internal/generator/go.go`
+
+#### P1: Config-Loader Lobby 接入设计 ✅ 已完成
+
+- [x] TypedStore 类型安全存储（`services/lobby/internal/config/store.go`）
+- [x] Register 泛型注册函数（`services/lobby/internal/config/registry.go`）
+- [x] 配置加载器从 MySQL 加载（`services/lobby/internal/config/loader.go`）
+- [x] 热更新订阅（`services/lobby/internal/config/watcher.go`）
+
+**相关文档**: `docs/superpowers/specs/2026-04-22-lobby-config-loading-design.md`
 
 ---
 
-### 已完成
+### 待处理
+
+#### P1: 签到活动（打通基础设施） ⏱️ 3-4天
+
+> 用签到活动驱动基础设施搭建，验证全链路
+
+**业务功能**:
+- [ ] 签到配置表设计（CSV 格式 + MySQL 表）
+- [ ] Proto 扩展：`lobby.v1.Checkin` RPC
+- [ ] 签到逻辑实现（每日签到、连续天数、奖励发放）
+- [ ] 接入 Config-Loader 打表
+
+**基础设施（同步完成）**:
+- [ ] OTel 链路追踪接入（Jaeger）
+- [ ] Prometheus 指标采集（QPS、延迟）
+- [ ] docker-compose 监控栈（Jaeger + Prometheus + Grafana）
+
+**验证**:
+- [ ] 单元测试
+- [ ] 链路追踪可查
+- [ ] 指标可观测
+
+---
+
+#### P1: Web 客户端（演示验证） ⏱️ 2-3天
+
+> 原生 HTML/JS 客户端，演示签到功能
+
+- [ ] WebSocket 消息协议定义
+- [ ] Gateway WebSocket 支持
+- [ ] 注册页面
+- [ ] 登录页面
+- [ ] 签到页面（展示连续天数、奖励）
+- [ ] 端到端验证
+
+**技术栈**: 原生 HTML/JS，无构建工具
+
+---
 
 #### P1: 网关多服务验证 ⏱️ 1-2天
 - [ ] 测试同时运行 User 和 Lobby 服务
 - [ ] 验证动态路由更新
 - [ ] 文档化多服务接入流程
 
-**说明**: 代码已支持多服务（`AtomicRouter`、`Manager`），需验证实际运行。
+**说明**: 代码已支持多服务（`AtomicRouter`、`Manager`），需实际运行验证。
 
 #### P1: 统一API响应格式 ⏱️ 2-3天
 - [ ] 设计通用 `ApiResponse` proto
@@ -189,11 +245,13 @@ go build ./services/lobby/...
 - [ ] 更新现有服务响应格式
 
 #### P1: 监控体系完善 ⏱️ 3-4天
-- [ ] 添加业务指标（活跃连接、QPS等）
-- [ ] 设置Grafana仪表板
-- [ ] 配置告警规则
+- [x] OTel 基础（`pkg/otelkit`）
+- [x] 连接指标（`ConnectionMetrics`）
+- [ ] Prometheus 集成
+- [ ] Grafana 仪表板
+- [ ] 告警规则
 
-**说明**: OTel 基础已就绪（`pkg/otelkit`），需完善业务指标。
+**说明**: 基础监控已完成，生产级监控待完善。
 
 ---
 
@@ -210,13 +268,16 @@ go build ./services/lobby/...
 - [ ] 性能测试和对比
 
 #### P2: 部署构建优化 ⏱️ 2-3天
-- [ ] 完善GitHub Actions流水线
-- [ ] 优化Docker镜像构建
-- [ ] 添加健康检查和就绪探针
+- [x] GitHub Actions CI 基础（`.github/workflows/ci.yml`）
+- [ ] 添加 lobby 服务构建到 CI
+- [ ] Dockerfile 和 Docker 镜像构建
+- [ ] 健康检查和就绪探针
 
 #### P3: 代码质量改进
-- [ ] 检查并重构过长的方法名
-- [ ] 补充单元测试
+- [x] 方法名长度合理（无明显过长问题）
+- [x] 测试覆盖：gateway/ws 45.3%, lobby/config 87.4%
+- [ ] user 服务测试覆盖（当前 11.6%）
+- [ ] golangci-lint 配置
 - [ ] 完善代码文档
 
 ---
@@ -225,7 +286,7 @@ go build ./services/lobby/...
 
 | 计划文档 | 状态 | 说明 |
 |----------|------|------|
-| `2026-04-15-lobby-service-implementation-plan.md` | 进行中 | Task 1-3 已完成，Task 4-6 待执行 |
+| `2026-04-15-lobby-service-implementation-plan.md` | ✅ 已完成 | Task 1-6 全部实现 |
 | `2026-04-18-datasource-routing-implementation-plan.md` | ✅ 已完成 | dsroute 核心已实现，Router/Loader/LPM 全部就绪 |
 | `2026-04-13-gateway-ingress-implementation-plan.md` | ✅ 已完成 | 网关 Ingress（含 `GatewayIngress`） |
 | `2026-04-13-gateway-etcd-meta-implementation-plan.md` | ✅ 已完成 | 网关 Etcd 元数据（含 Watch 热更新、Bootstrap、draining） |
@@ -237,7 +298,7 @@ go build ./services/lobby/...
 |----------|------|------|
 | `2026-04-17-datasource-routing-and-pools.md` | ✅ 已完成 | dsroute 包已实现 |
 | `2026-04-20-heartbeat-design.md` | ✅ 已完成 | 心跳与连接管理设计 |
-| `2026-04-15-lobby-service-design.md` | 进行中 | Task 1-3 完成，Task 4-6 待实现 |
+| `2026-04-15-lobby-service-design.md` | ✅ 已完成 | Task 1-6 全部实现 |
 | `2026-04-16-lobby-config-csv-and-tooling-spec.md` | 待实现 | 大厅配置与工具 |
 | `2026-04-13-gateway-backend-connection-design.md` | ✅ 已完成 | 网关后端连接 |
 | `2026-04-13-kd48-roadmap.md` | 路线图 | M0-M5+ 阶段规划 |
@@ -250,7 +311,7 @@ go build ./services/lobby/...
 |------|----------|----------|------|
 | **M0** | 统一入口、账号与会话、可观测、本地可跑 | 网关 WS、gRPC、User、Etcd、MySQL、Redis、OTel | ✅ 基本完成 |
 | **M1** | 架子可扩、协作不断档 | compose/README、第二服务接入套路、最小 CI | ✅ 已完成（Lobby 骨架验证第二服务接入套路） |
-| **M2** | 大厅可用 | 大厅无状态服务 + DB/缓存；染色/AB/打表最小可用 | 待开始 |
+| **M2** | 大厅可用 | 大厅无状态服务 + DB/缓存；染色/AB/打表最小可用 | 🟡 进行中 |
 | **M3** | 房间：归属、匹配、开桌前退房与重连 | 房间有状态服务池 | 待开始 |
 | **M4** | 游戏内对局 | 有状态游戏/回合服务 | 待开始 |
 | **M5+** | 活动深化、轻量客户端 | 依赖前置阶段 | 待开始 |
