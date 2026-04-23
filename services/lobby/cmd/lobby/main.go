@@ -195,6 +195,10 @@ func main() {
 	if rdb, ok := redisPools["default"].(*redis.Client); ok {
 		itemSvc := NewItemService(rdb)
 		lobbyv1.RegisterItemServiceServer(s, itemSvc)
+
+		// 注册 CheckinService
+		checkinSvc := NewCheckinService(rdb)
+		lobbyv1.RegisterCheckinServiceServer(s, checkinSvc)
 	} else {
 		slog.Error("default redis pool not available or not a *redis.Client")
 	}

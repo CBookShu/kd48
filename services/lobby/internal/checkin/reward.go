@@ -47,6 +47,11 @@ func (c *RewardCalculator) HasContinuousReward(continuousDays int) bool {
 	return ok
 }
 
+// GetAllContinuousRewards 获取所有连续奖励配置
+func (c *RewardCalculator) GetAllContinuousRewards() map[int]map[int32]int64 {
+	return c.continuousRewards
+}
+
 // MergeRewards 合并两个奖励 map
 func MergeRewards(base, add map[int32]int64) map[int32]int64 {
 	result := make(map[int32]int64)
