@@ -2,8 +2,10 @@ package otelkit
 
 import (
 	"context"
+	"os"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -12,13 +14,29 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// InitTracer 初始化 OTel TracerProvider
-// 目前使用标准输出导出（方便本地调试），后续替换为 Jaeger/OTLP 导出器即可
+// InitTracer 初始化 OTel TracerProvider，支持 OTLP 导出
+// 如果设置了 OTEL_EXPORTER_OTLP_ENDPOINT 环境变量，使用 OTLP HTTP 导出
+// 否则使用标准输出导出（本地开发）
 func InitTracer(serviceName string) (func(context.Context) error, error) {
-	// 使用标准输出导出器 (本地开发阶段最直观)
-	exporter, err := stdouttrace.New()
-	if err != nil {
-		return nil, err
+	var exporter sdktrace.SpanExporter
+	var err error
+
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otlpEndpoint != "" {
+		// 使用 OTLP HTTP 导出（连接 Jaeger）
+		exporter, err = otlptracehttp.New(context.Background(),
+			otlptracehttp.WithEndpoint(otlpEndpoint),
+			otlptracehttp.WithInsecure(),
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// 使用标准输出导出器（本地开发阶段）
+		exporter, err = stdouttrace.New()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tp := sdktrace.NewTracerProvider(
