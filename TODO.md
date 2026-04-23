@@ -193,42 +193,56 @@ go test ./gateway/internal/ws/... -v
 
 ---
 
-### 待处理
+---
 
-#### P1: 签到活动（打通基础设施） ⏱️ 3-4天
+## 已完成
 
-> 用签到活动驱动基础设施搭建，验证全链路
+### 签到活动（打通基础设施） (2026-04-24)
 
-**业务功能**:
-- [ ] 签到配置表设计（CSV 格式 + MySQL 表）
-- [ ] Proto 扩展：`lobby.v1.Checkin` RPC
-- [ ] 签到逻辑实现（每日签到、连续天数、奖励发放）
-- [ ] 接入 Config-Loader 打表
+- [x] Proto 定义：`lobby/v1/common.proto`, `lobby/v1/item.proto`, `lobby/v1/checkin.proto`
+- [x] MySQL 迁移：6张表（checkin_period, checkin_daily_reward, checkin_continuous_reward, item_config, user_items, user_checkin）
+- [x] CSV 配置文件：`tools/config-loader/testdata/checkin_*.csv`, `item_config.csv`
+- [x] ItemStore 实现：Redis Hash 存储用户物品
+- [x] CheckinStore 实现：Redis String JSON 存储签到状态
+- [x] RewardCalculator：每日奖励和连续奖励计算
+- [x] ItemService gRPC：GetMyItems RPC
+- [x] CheckinService gRPC：Checkin, GetStatus RPC
+- [x] 观测环境：Docker Compose (Jaeger + Prometheus + Grafana)
+- [x] OTel OTLP 导出：支持 Jaeger 链路追踪
+- [x] Web 客户端：登录、注册、签到、背包页面
 
-**基础设施（同步完成）**:
-- [ ] OTel 链路追踪接入（Jaeger）
-- [ ] Prometheus 指标采集（QPS、延迟）
-- [ ] docker-compose 监控栈（Jaeger + Prometheus + Grafana）
+**相关文件**:
+- `api/proto/lobby/v1/*.proto` - Proto 定义
+- `services/lobby/migrations/001_create_checkin_tables.sql` - 数据库迁移
+- `services/lobby/internal/item/` - 物品存储
+- `services/lobby/internal/checkin/` - 签到逻辑
+- `services/lobby/cmd/lobby/*_server.go` - gRPC 服务
+- `web/` - Web 客户端
 
-**验证**:
-- [ ] 单元测试
-- [ ] 链路追踪可查
-- [ ] 指标可观测
+**相关文档**:
+- `docs/superpowers/specs/2026-04-23-checkin-activity-design.md`
+- `docs/superpowers/plans/2026-04-24-checkin-activity-implementation-plan.md`
+
+**验证命令**:
+```bash
+go test ./services/lobby/... -v
+docker-compose up -d
+# 访问 http://localhost:8080/web/
+```
 
 ---
 
-#### P1: Web 客户端（演示验证） ⏱️ 2-3天
+### 待处理
 
-> 原生 HTML/JS 客户端，演示签到功能
+#### P1: 签到活动后续优化
 
-- [ ] WebSocket 消息协议定义
-- [ ] Gateway WebSocket 支持
-- [ ] 注册页面
-- [ ] 登录页面
-- [ ] 签到页面（展示连续天数、奖励）
-- [ ] 端到端验证
+> 已完成 MVP，后续优化项
 
-**技术栈**: 原生 HTML/JS，无构建工具
+**待完善**:
+- [ ] 接入 Config-Loader 打表（从 MySQL 加载配置到内存）
+- [ ] 分布式锁防止并发签到
+- [ ] Redis 事务保证原子性
+- [ ] 从 ConfigStore 获取 Ping 返回的 ConfigRevision
 
 ---
 
@@ -291,6 +305,7 @@ go test ./gateway/internal/ws/... -v
 | `2026-04-13-gateway-ingress-implementation-plan.md` | ✅ 已完成 | 网关 Ingress（含 `GatewayIngress`） |
 | `2026-04-13-gateway-etcd-meta-implementation-plan.md` | ✅ 已完成 | 网关 Etcd 元数据（含 Watch 热更新、Bootstrap、draining） |
 | `2026-04-20-heartbeat-fix-plan.md` | ✅ 已完成 | 心跳与连接管理 |
+| `2026-04-24-checkin-activity-implementation-plan.md` | ✅ 已完成 | 签到活动全链路打通 |
 
 ### 规格文档状态
 
@@ -302,6 +317,7 @@ go test ./gateway/internal/ws/... -v
 | `2026-04-16-lobby-config-csv-and-tooling-spec.md` | 待实现 | 大厅配置与工具 |
 | `2026-04-13-gateway-backend-connection-design.md` | ✅ 已完成 | 网关后端连接 |
 | `2026-04-13-kd48-roadmap.md` | 路线图 | M0-M5+ 阶段规划 |
+| `2026-04-23-checkin-activity-design.md` | ✅ 已完成 | 签到活动设计 |
 
 ---
 
