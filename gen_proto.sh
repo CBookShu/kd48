@@ -10,4 +10,7 @@ protoc -I api/proto \
 	gateway/v1/gateway.proto \
 	gateway/v1/service_type.proto \
 	gateway/v1/gateway_route.proto \
-	lobby/v1/lobby.proto
+	lobby/v1/lobby.proto \
+	lobby/v1/common.proto \
+	lobby/v1/item.proto \
+	lobby/v1/checkin.proto

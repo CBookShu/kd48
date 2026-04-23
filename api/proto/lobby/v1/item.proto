@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package lobby.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1";
+
+import "lobby/v1/common.proto";
+
+// ItemService 物品服务
+service ItemService {
+  rpc GetMyItems(GetMyItemsRequest) returns (ApiResponse);
+}
+
+message GetMyItemsRequest {}
+
+message MyItemsData {
+  map<int32, int64> items = 1;  // item_id -> count
+}

@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package lobby.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1";
+
+import "google/protobuf/any.proto";
+
+// ApiResponse 通用响应外壳
+message ApiResponse {
+  int32 code = 1;
+  string message = 2;
+  google.protobuf.Any data = 3;
+  map<string, string> meta = 4;
+}
+
+// ErrorCode 错误码定义
+enum ErrorCode {
+  SUCCESS = 0;
+
+  // 通用错误 1-99
+  INVALID_REQUEST = 1;
+  INTERNAL_ERROR = 2;
+  SERVICE_UNAVAILABLE = 3;
+
+  // 用户相关 100-199
+  USER_NOT_FOUND = 100;
+  USER_NOT_AUTHENTICATED = 101;
+
+  // 签到相关 200-299
+  CHECKIN_ALREADY_TODAY = 200;
+  CHECKIN_PERIOD_NOT_ACTIVE = 201;
+  CHECKIN_PERIOD_EXPIRED = 202;
+
+  // 物品相关 300-399
+  ITEM_NOT_FOUND = 300;
+  ITEM_INSUFFICIENT = 301;
+}
