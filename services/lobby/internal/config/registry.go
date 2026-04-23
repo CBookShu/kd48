@@ -58,7 +58,7 @@ func (cs *ConfigStore) GetRegisteredNames() []string {
 
 // Register 注册配置（init 中调用）
 // 如果同名配置已存在且类型匹配，返回已有 store
-// 如果类型不匹配，返回 nil 和错误（不会 panic）
+// 如果类型不匹配，panic（这是编程错误，应在开发阶段发现）
 func Register[T any](pkg baseconfig.Config) *TypedStore[T] {
 	cs := GetStore()
 
@@ -73,9 +73,7 @@ func Register[T any](pkg baseconfig.Config) *TypedStore[T] {
 		if typedStore, ok := existing.(*TypedStore[T]); ok {
 			return typedStore
 		}
-		// 类型不匹配，记录错误但不要 panic
-		// 在 init() 中 panic 是不可取的，所以返回 nil
-		// 调用方应检查返回值
+		// 类型不匹配，这是编程错误（init 阶段应尽早发现）
 		panic(fmt.Sprintf("config %q already registered with different type", name))
 	}
 
