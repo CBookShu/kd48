@@ -1,0 +1,6 @@
+连续天数,奖励物品映射
+continuous_days,rewards
+int32,map<int32,int64>
+7,2001:1
+14,2001:2
+30,2002:1

@@ -1,0 +1,4 @@
+期ID,期名称,开始时间,结束时间,状态
+period_id,period_name,start_time,end_time,status
+int64,string,time,time,string
+1,日常签到,2026-01-01 00:00:00,2026-12-31 23:59:59,active
