@@ -7,21 +7,33 @@ import (
 	"testing"
 
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
+
+// newTestLobbyRouter 创建测试用 Router
+func newTestLobbyRouter(t *testing.T) *dsroute.Router {
+	mysqlPools := map[string]*sql.DB{}
+	redisPools := map[string]redis.UniversalClient{}
+
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create test router: %v", err)
+	}
+	return router
+}
 
 func setupTestServer(t *testing.T) (lobbyv1.LobbyServiceClient, func()) {
 	listener := bufconn.Listen(1024 * 1024)
 
 	server := grpc.NewServer()
 
-	// 创建空的连接池（测试中不使用实际数据库）
-	mysqlPools := make(map[string]*sql.DB)
-	redisPools := make(map[string]redis.UniversalClient)
+	// 创建测试 Router
+	router := newTestLobbyRouter(t)
 
-	lobbySvc := NewLobbyService(mysqlPools, redisPools)
+	lobbySvc := NewLobbyService(router)
 	lobbyv1.RegisterLobbyServiceServer(server, lobbySvc)
 
 	go func() {

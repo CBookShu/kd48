@@ -15,13 +15,21 @@ import (
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
+	"github.com/CBookShu/kd48/services/lobby/internal/config"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+)
+
+// Routing keys for lobby service
+const (
+	routingKeyConfigData   = "lobby:config-data"
+	routingKeyConfigNotify = "lobby:config-notify"
 )
 
 func main() {
@@ -121,6 +129,48 @@ func main() {
 	}
 	defer etcdCli.Close()
 
+	// 从 etcd 加载路由配置
+	routeLoader := dsroute.NewRouteLoader(etcdCli, "kd48/routing")
+	routingCfg, err := routeLoader.Get(context.Background())
+	if err != nil {
+		slog.Error("failed to load routing config from etcd", "error", err)
+		os.Exit(1)
+	}
+
+	// 创建 Router
+	router, err := dsroute.NewRouter(
+		mysqlPools,
+		redisPools,
+		routingCfg.MySQLRoutes,
+		routingCfg.RedisRoutes,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create router: %w", err))
+	}
+
+	// 启动路由配置监听
+	go func() {
+		if err := routeLoader.Watch(context.Background(), func(cfg *dsroute.RoutingConfig) {
+			router.UpdateRoutes(cfg.MySQLRoutes, cfg.RedisRoutes)
+		}); err != nil {
+			slog.Error("route watcher stopped", "error", err)
+		}
+	}()
+
+	// 初始化配置加载器
+	configLoader := config.NewConfigLoader(router, routingKeyConfigData, config.GetStore())
+
+	// 启动时加载所有配置
+	if err := configLoader.LoadAll(context.Background()); err != nil {
+		slog.Error("failed to load configs", "error", err)
+		// 不 panic，允许部分配置加载失败
+	}
+	slog.Info("configs loaded")
+
+	// 启动配置热更新订阅
+	configWatcher := config.NewConfigWatcher(router, routingKeyConfigNotify, configLoader, config.ConfigNotifyChannel)
+	go configWatcher.Start(context.Background())
+
 	// 启动 gRPC Server
 	// 从配置读取端口，默认 9001
 	port := c.LobbyService.Port
@@ -137,7 +187,7 @@ func main() {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 
-	lobbySvc := NewLobbyService(mysqlPools, redisPools)
+	lobbySvc := NewLobbyService(router)
 	lobbyv1.RegisterLobbyServiceServer(s, lobbySvc)
 	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(lobbySvc))
 
