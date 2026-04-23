@@ -28,6 +28,75 @@
 
 ## 项目特定约束
 
+### 分支管理
+
+- **禁止直接修改 master 分支**：所有变更必须从 master 拉出新分支，完成后再合并回 master
+- 分支命名规范：`feature/<功能名>`、`fix/<问题名>`、`refactor/<重构名>`
+
+### 数据源访问规范
+
+- **MySQL/Redis 连接必须通过 `dsroute.Router` 解析**
+- 禁止直接使用 map key 访问连接池（如 `mysqlPools["default"]`、`redisPools["default"]`）
+- 必须定义 routing key，通过 `router.ResolveDB(ctx, routingKey)` 或 `router.ResolveRedis(ctx, routingKey)` 获取连接
+- Routing Key 命名规范：`<服务名>:<业务域>`，如 `lobby:config`、`user:session`
+
+#### 正确示例
+
+```go
+// ✅ 正确：通过 Router 解析
+db, poolName, err := router.ResolveDB(ctx, "lobby:config")
+if err != nil {
+    return fmt.Errorf("resolve db: %w", err)
+}
+
+rdb, poolName, err := router.ResolveRedis(ctx, "lobby:config")
+if err != nil {
+    return fmt.Errorf("resolve redis: %w", err)
+}
+```
+
+#### 错误示例
+
+```go
+// ❌ 错误：直接访问连接池
+db := mysqlPools["default"]
+rdb := redisPools["default"]
+
+// ❌ 错误：服务内部暴露 pools map
+func (s *lobbyService) getMySQLDB(name string) (*sql.DB, error) {
+    db, ok := s.mysqlPools[name]  // 应改为使用 Router
+    ...
+}
+```
+
+#### 架构说明
+
+- `main.go` 初始化连接池后，应创建 `dsroute.Router` 并注入服务
+- 服务内部持有 `*dsroute.Router`，通过 routing key 解析连接
+- 参考 `services/user/cmd/user/main.go` 的正确实现
+
+#### 路由配置初始化
+
+新服务添加 routing key 后，需要在 `gateway/cmd/seed-gateway-meta/main.go` 中初始化对应的路由规则：
+
+```go
+// 在 seed-gateway-meta 中添加路由配置
+mysqlRoutes := []dsroute.RouteRule{
+    {Prefix: "lobby:config-data", Pool: "default"},
+}
+redisRoutes := []dsroute.RouteRule{
+    {Prefix: "lobby:config-notify", Pool: "default"},
+}
+
+// 写入 etcd
+routesJSON, _ := json.Marshal(mysqlRoutes)
+cli.Put(ctx, "kd48/routing/mysql_routes", string(routesJSON))
+routesJSON, _ = json.Marshal(redisRoutes)
+cli.Put(ctx, "kd48/routing/redis_routes", string(routesJSON))
+```
+
+这样部署时通过 `go run ./gateway/cmd/seed-gateway-meta` 即可导入必要的前置数据。
+
 ### 设计文档路径
 
 - 设计文档：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
@@ -51,6 +120,14 @@
 
 - 测试：`go test ./...`（在 go.work 根目录）
 - 构建：`go build ./...`
+
+### TODO
+
+- [ ] 添加真实数据库/Redis 集成测试（当前使用 sqlmock/miniredis 模拟）
+  - 真实 MySQL 数据库集成测试
+  - 真实 Redis Pub/Sub 集成测试
+  - 配置热更新端到端测试
+  - 路由配置变更后的连接切换测试
 
 ---
 
