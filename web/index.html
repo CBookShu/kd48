@@ -1,0 +1,31 @@
+<!-- web/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>kd48 - 游戏平台</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="/">首页</a>
+    <a href="/checkin.html">签到</a>
+    <a href="/items.html">背包</a>
+    <a href="#" onclick="logout()">退出</a>
+  </nav>
+
+  <div class="container">
+    <div class="card">
+      <h1>欢迎来到 kd48</h1>
+      <p>一个简单的游戏平台演示</p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!checkAuth()) {
+      // 未登录会自动跳转
+    }
+  </script>
+</body>
+</html>

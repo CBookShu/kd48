@@ -1,0 +1,53 @@
+<!-- web/register.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>注册 - kd48</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>注册</h2>
+      <form id="registerForm">
+        <input type="text" id="username" placeholder="用户名" required>
+        <input type="password" id="password" placeholder="密码" required>
+        <input type="password" id="password2" placeholder="确认密码" required>
+        <button type="submit" class="btn">注册</button>
+      </form>
+      <p style="margin-top: 10px;">
+        已有账号？<a href="/login.html">登录</a>
+      </p>
+      <p id="error" style="color: red;"></p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const password2 = document.getElementById('password2').value;
+
+      if (password !== password2) {
+        document.getElementById('error').textContent = '密码不一致';
+        return;
+      }
+
+      try {
+        const resp = await register(username, password);
+        if (resp.code === 0) {
+          alert('注册成功，请登录');
+          window.location.href = '/login.html';
+        } else {
+          document.getElementById('error').textContent = resp.message;
+        }
+      } catch (err) {
+        document.getElementById('error').textContent = '网络错误';
+      }
+    });
+  </script>
+</body>
+</html>

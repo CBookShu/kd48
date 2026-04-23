@@ -1,0 +1,42 @@
+<!-- web/checkin.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>签到 - kd48</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="/">首页</a>
+    <a href="/checkin.html">签到</a>
+    <a href="/items.html">背包</a>
+    <a href="#" onclick="logout()">退出</a>
+  </nav>
+
+  <div class="container">
+    <div class="card">
+      <h2>每日签到</h2>
+      <div id="status">加载中...</div>
+    </div>
+
+    <div class="card">
+      <div id="days"></div>
+    </div>
+
+    <div class="card">
+      <button id="checkinBtn" class="btn" onclick="doCheckin()">立即签到</button>
+    </div>
+
+    <div class="card" id="result"></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/checkin.js"></script>
+  <script>
+    if (checkAuth()) {
+      loadStatus();
+    }
+  </script>
+</body>
+</html>

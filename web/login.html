@@ -1,0 +1,51 @@
+<!-- web/login.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>登录 - kd48</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>登录</h2>
+      <form id="loginForm">
+        <input type="text" id="username" placeholder="用户名" required>
+        <input type="password" id="password" placeholder="密码" required>
+        <button type="submit" class="btn">登录</button>
+      </form>
+      <p style="margin-top: 10px;">
+        没有账号？<a href="/register.html">注册</a>
+      </p>
+      <p id="error" style="color: red;"></p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const resp = await login(username, password);
+        if (resp.code === 0) {
+          saveToken(resp.data.token);
+          window.location.href = '/';
+        } else {
+          document.getElementById('error').textContent = resp.message;
+        }
+      } catch (err) {
+        document.getElementById('error').textContent = '网络错误';
+      }
+    });
+
+    // 已登录则跳转首页
+    if (getToken()) {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>
