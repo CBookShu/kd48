@@ -40,7 +40,8 @@ func TestWatcher_ValidMessage(t *testing.T) {
 		WithArgs("test_config").
 		WillReturnRows(rows)
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,7 +94,8 @@ func TestWatcher_InvalidJSON(t *testing.T) {
 	}
 	defer db.Close()
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,7 +132,8 @@ func TestWatcher_MissingField(t *testing.T) {
 	}
 	defer db.Close()
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -167,7 +170,8 @@ func TestWatcher_ContextCancel(t *testing.T) {
 	}
 	defer db.Close()
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	watcher := NewConfigWatcher(rdb, loader, ConfigNotifyChannel)
 
 	ctx, cancel := context.WithCancel(context.Background())

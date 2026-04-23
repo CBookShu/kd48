@@ -2,33 +2,41 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"reflect"
+
+	"github.com/CBookShu/kd48/pkg/dsroute"
 )
 
 // ConfigLoader 从 MySQL 加载配置
 type ConfigLoader struct {
-	db    *sql.DB
-	store *ConfigStore
+	router     *dsroute.Router
+	routingKey string
+	store      *ConfigStore
 }
 
 // NewConfigLoader 创建加载器
-func NewConfigLoader(db *sql.DB, store *ConfigStore) *ConfigLoader {
-	return &ConfigLoader{db: db, store: store}
+func NewConfigLoader(router *dsroute.Router, routingKey string, store *ConfigStore) *ConfigLoader {
+	return &ConfigLoader{router: router, routingKey: routingKey, store: store}
 }
 
 // LoadOne 加载单个配置
 func (l *ConfigLoader) LoadOne(ctx context.Context, name string) error {
-	// 1. 获取对应的 TypedStore
+	// 1. 通过 Router 解析数据库连接
+	db, poolName, err := l.router.ResolveDB(ctx, l.routingKey)
+	if err != nil {
+		return fmt.Errorf("resolve db for routing key %q: %w", l.routingKey, err)
+	}
+
+	// 2. 获取对应的 TypedStore
 	ts := l.store.GetTypedStore(name)
 	if ts == nil {
 		return fmt.Errorf("config %s not registered", name)
 	}
 
-	// 2. 从 MySQL 读取最新版本
+	// 3. 从 MySQL 读取最新版本
 	query := `
 		SELECT data, revision
 		FROM lobby_config_revision
@@ -39,17 +47,17 @@ func (l *ConfigLoader) LoadOne(ctx context.Context, name string) error {
 
 	var data []byte
 	var revision int64
-	err := l.db.QueryRowContext(ctx, query, name).Scan(&data, &revision)
+	err = db.QueryRowContext(ctx, query, name).Scan(&data, &revision)
 	if err != nil {
 		return fmt.Errorf("query config %s: %w", name, err)
 	}
 
-	// 3. 解析 JSON 并更新 Store
-	return l.parseAndUpdate(name, data, revision, ts)
+	// 4. 解析 JSON 并更新 Store
+	return l.parseAndUpdate(name, data, revision, ts, poolName)
 }
 
 // parseAndUpdate 解析 JSON 并更新 TypedStore
-func (l *ConfigLoader) parseAndUpdate(name string, data []byte, revision int64, ts any) error {
+func (l *ConfigLoader) parseAndUpdate(name string, data []byte, revision int64, ts any, poolName string) error {
 	// 使用反射获取 TypedStore 的类型参数并解析
 	storeValue := reflect.ValueOf(ts)
 	if storeValue.Kind() != reflect.Ptr {
@@ -100,7 +108,7 @@ func (l *ConfigLoader) parseAndUpdate(name string, data []byte, revision int64, 
 	}
 	updateMethod.Call(args)
 
-	slog.Debug("config loaded", "name", name, "revision", revision)
+	slog.Debug("config loaded", "name", name, "revision", revision, "pool", poolName)
 	return nil
 }
 

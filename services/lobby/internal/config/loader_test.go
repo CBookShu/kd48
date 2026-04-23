@@ -5,8 +5,28 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/redis/go-redis/v9"
 )
+
+const testRoutingKey = "lobby:config-data"
+
+// newTestRouter 创建测试用 Router，包含 mock 数据库
+func newTestRouter(t *testing.T, db *sql.DB) *dsroute.Router {
+	mysqlPools := map[string]*sql.DB{"default": db}
+	redisPools := map[string]redis.UniversalClient{} // loader 不需要 redis
+
+	routes := []dsroute.RouteRule{
+		{Prefix: testRoutingKey, Pool: "default"},
+	}
+
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, routes, nil)
+	if err != nil {
+		t.Fatalf("failed to create test router: %v", err)
+	}
+	return router
+}
 
 func TestLoadOne_Success(t *testing.T) {
 	ResetStore()
@@ -29,8 +49,11 @@ func TestLoadOne_Success(t *testing.T) {
 		WithArgs("test_config").
 		WillReturnRows(rows)
 
+	// 创建测试 Router
+	router := newTestRouter(t, db)
+
 	// 执行加载
-	loader := NewConfigLoader(db, GetStore())
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadOne(context.Background(), "test_config")
 	if err != nil {
 		t.Fatalf("LoadOne() error = %v", err)
@@ -71,7 +94,8 @@ func TestLoadOne_NotFound(t *testing.T) {
 		WithArgs("missing_config").
 		WillReturnError(sql.ErrNoRows)
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadOne(context.Background(), "missing_config")
 	if err == nil {
 		t.Error("LoadOne() should return error for missing config")
@@ -91,7 +115,8 @@ func TestLoadOne_NotRegistered(t *testing.T) {
 	}
 	defer db.Close()
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadOne(context.Background(), "unregistered_config")
 	if err == nil {
 		t.Error("LoadOne() should return error for unregistered config")
@@ -123,7 +148,8 @@ func TestLoadAll_PartialFailure(t *testing.T) {
 		WithArgs("good_config").
 		WillReturnRows(rows)
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadAll(context.Background())
 	// LoadAll 不应该返回错误，即使部分失败
 	if err != nil {
@@ -166,7 +192,8 @@ func TestLoadOne_InvalidJSON(t *testing.T) {
 		WithArgs("invalid_json_config").
 		WillReturnRows(rows)
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadOne(context.Background(), "invalid_json_config")
 	if err == nil {
 		t.Error("LoadOne() should return error for invalid JSON")
@@ -186,7 +213,8 @@ func TestLoadAll_EmptyRegistry(t *testing.T) {
 	}
 	defer db.Close()
 
-	loader := NewConfigLoader(db, GetStore())
+	router := newTestRouter(t, db)
+	loader := NewConfigLoader(router, testRoutingKey, GetStore())
 	err = loader.LoadAll(context.Background())
 	if err != nil {
 		t.Errorf("LoadAll() on empty registry error = %v, want nil", err)
