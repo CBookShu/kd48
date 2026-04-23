@@ -15,6 +15,7 @@ import (
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/pkg/conf"
+	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/pkg/logzap"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/registry"
@@ -115,6 +116,20 @@ func main() {
 		}
 	}()
 
+	// 创建 Router
+	mysqlRoutes := make([]dsroute.RouteRule, len(dsCfg.MySQLRoutes))
+	for i, r := range dsCfg.MySQLRoutes {
+		mysqlRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	}
+	redisRoutes := make([]dsroute.RouteRule, len(dsCfg.RedisRoutes))
+	for i, r := range dsCfg.RedisRoutes {
+		redisRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
+	}
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	if err != nil {
+		panic(fmt.Errorf("failed to create router: %w", err))
+	}
+
 	// 创建 etcd 客户端
 	etcdCli, err := registry.NewClient(c.Etcd)
 	if err != nil {
@@ -123,7 +138,7 @@ func main() {
 	defer etcdCli.Close()
 
 	// 初始化配置加载器
-	configLoader := config.NewConfigLoader(mysqlPools["default"], config.GetStore())
+	configLoader := config.NewConfigLoader(router, "default", config.GetStore())
 
 	// 启动时加载所有配置
 	if err := configLoader.LoadAll(context.Background()); err != nil {
@@ -133,7 +148,7 @@ func main() {
 	slog.Info("configs loaded")
 
 	// 启动配置热更新订阅
-	configWatcher := config.NewConfigWatcher(redisPools["default"].(*redis.Client), configLoader, config.ConfigNotifyChannel)
+	configWatcher := config.NewConfigWatcher(router, "default", configLoader, config.ConfigNotifyChannel)
 	go configWatcher.Start(context.Background())
 
 	// 启动 gRPC Server
@@ -152,7 +167,7 @@ func main() {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 
-	lobbySvc := NewLobbyService(mysqlPools, redisPools)
+	lobbySvc := NewLobbyService(router)
 	lobbyv1.RegisterLobbyServiceServer(s, lobbySvc)
 	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(lobbySvc))
 
