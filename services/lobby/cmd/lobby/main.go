@@ -26,6 +26,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Routing keys for lobby service
+const (
+	routingKeyConfigData   = "lobby:config-data"
+	routingKeyConfigNotify = "lobby:config-notify"
+)
+
 func main() {
 	c, err := conf.Load("./config.yaml")
 	if err != nil {
@@ -116,20 +122,6 @@ func main() {
 		}
 	}()
 
-	// 创建 Router
-	mysqlRoutes := make([]dsroute.RouteRule, len(dsCfg.MySQLRoutes))
-	for i, r := range dsCfg.MySQLRoutes {
-		mysqlRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
-	}
-	redisRoutes := make([]dsroute.RouteRule, len(dsCfg.RedisRoutes))
-	for i, r := range dsCfg.RedisRoutes {
-		redisRoutes[i] = dsroute.RouteRule{Prefix: r.Prefix, Pool: r.Pool}
-	}
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
-	if err != nil {
-		panic(fmt.Errorf("failed to create router: %w", err))
-	}
-
 	// 创建 etcd 客户端
 	etcdCli, err := registry.NewClient(c.Etcd)
 	if err != nil {
@@ -137,8 +129,36 @@ func main() {
 	}
 	defer etcdCli.Close()
 
+	// 从 etcd 加载路由配置
+	routeLoader := dsroute.NewRouteLoader(etcdCli, "kd48/routing")
+	routingCfg, err := routeLoader.Get(context.Background())
+	if err != nil {
+		slog.Error("failed to load routing config from etcd", "error", err)
+		os.Exit(1)
+	}
+
+	// 创建 Router
+	router, err := dsroute.NewRouter(
+		mysqlPools,
+		redisPools,
+		routingCfg.MySQLRoutes,
+		routingCfg.RedisRoutes,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create router: %w", err))
+	}
+
+	// 启动路由配置监听
+	go func() {
+		if err := routeLoader.Watch(context.Background(), func(cfg *dsroute.RoutingConfig) {
+			router.UpdateRoutes(cfg.MySQLRoutes, cfg.RedisRoutes)
+		}); err != nil {
+			slog.Error("route watcher stopped", "error", err)
+		}
+	}()
+
 	// 初始化配置加载器
-	configLoader := config.NewConfigLoader(router, "default", config.GetStore())
+	configLoader := config.NewConfigLoader(router, routingKeyConfigData, config.GetStore())
 
 	// 启动时加载所有配置
 	if err := configLoader.LoadAll(context.Background()); err != nil {
@@ -148,7 +168,7 @@ func main() {
 	slog.Info("configs loaded")
 
 	// 启动配置热更新订阅
-	configWatcher := config.NewConfigWatcher(router, "default", configLoader, config.ConfigNotifyChannel)
+	configWatcher := config.NewConfigWatcher(router, routingKeyConfigNotify, configLoader, config.ConfigNotifyChannel)
 	go configWatcher.Start(context.Background())
 
 	// 启动 gRPC Server
