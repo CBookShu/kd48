@@ -54,3 +54,54 @@ func TestWrapIngress_PropagatesError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
+	stub := &stubIngressClient{
+		reply: &gatewayv1.IngressReply{JsonPayload: []byte(`{}`)},
+	}
+
+	// 模拟已认证用户
+	meta := &clientMeta{
+		userID:          12345,
+		isAuthenticated: true,
+	}
+
+	var gotUserID int64
+	var ctxChecked bool
+
+	// 创建一个包装器来检查 context
+	h := WrapIngress(&contextCheckerClient{
+		stubIngressClient: stub,
+		checkCtx: func(ctx context.Context) {
+			ctxChecked = true
+			if v := ctx.Value("user_id"); v != nil {
+				gotUserID = v.(int64)
+			}
+		},
+	}, "/test")
+
+	_, err := h(context.Background(), []byte(`{}`), meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ctxChecked {
+		t.Fatal("context was not checked")
+	}
+
+	if gotUserID != 12345 {
+		t.Fatalf("want user_id=12345 in context, got %d", gotUserID)
+	}
+}
+
+type contextCheckerClient struct {
+	*stubIngressClient
+	checkCtx func(ctx context.Context)
+}
+
+func (c *contextCheckerClient) Call(ctx context.Context, in *gatewayv1.IngressRequest, opts ...grpc.CallOption) (*gatewayv1.IngressReply, error) {
+	if c.checkCtx != nil {
+		c.checkCtx(ctx)
+	}
+	return c.stubIngressClient.Call(ctx, in, opts...)
+}

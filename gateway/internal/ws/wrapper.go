@@ -34,6 +34,11 @@ func WrapUnary[Req proto.Message, Resp proto.Message](
 // WrapIngress 将 WS payload（UTF-8 JSON 字节）经 GatewayIngress/Call 转发至后端。
 func WrapIngress(cli gatewayv1.GatewayIngressClient, route string) WsHandlerFunc {
 	return func(ctx context.Context, payload []byte, meta *clientMeta) (*WsHandlerResult, error) {
+		// 如果已认证，将 user_id 注入到 context
+		if meta.userID > 0 {
+			ctx = context.WithValue(ctx, "user_id", meta.userID)
+		}
+
 		reply, err := cli.Call(ctx, &gatewayv1.IngressRequest{
 			Route:       route,
 			JsonPayload: payload,
