@@ -1,45 +1,45 @@
-# WebSocket Web Client Design
+# WebSocket Web 客户端设计文档
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Convert the web client from HTTP REST API to WebSocket for all backend communication.
+**目标：** 将 Web 客户端从 HTTP REST API 改为使用 WebSocket 进行所有后端通信。
 
-**Architecture:** Single WebSocket connection with promise-based API wrapper. The web client establishes one WebSocket connection to the gateway and uses it for all API calls (login, register, checkin, items). Message correlation is handled by matching request `method` to response `method`.
+**架构：** 单一 WebSocket 连接配合 Promise 风格的 API 封装。Web 客户端建立一个 WebSocket 连接到网关，用于所有 API 调用（登录、注册、签到、物品）。通过匹配请求和响应的 `method` 字段进行消息关联。
 
-**Tech Stack:** JavaScript (ES6+), WebSocket API, Promise-based async/await
+**技术栈：** JavaScript (ES6+)、WebSocket API、Promise/async-await
 
 ---
 
-## Problem Statement
+## 问题描述
 
-The current web client (`web/js/api.js`) uses HTTP REST API:
+当前 Web 客户端 (`web/js/api.js`) 使用 HTTP REST API：
 ```javascript
 fetch('http://localhost:8080/api/user.v1.UserService/Login', {...})
 ```
 
-But the gateway only provides:
-- `/health` - health check
-- `/ws` - WebSocket endpoint for gRPC calls
-- `/web/*` - static file serving
+但网关只提供：
+- `/health` - 健康检查
+- `/ws` - WebSocket 端点，用于 gRPC 调用
+- `/web/*` - 静态文件服务
 
-There is no `/api/*` HTTP REST endpoint. The web client needs to use WebSocket for all communication.
+没有 `/api/*` HTTP REST 端点。Web 客户端需要使用 WebSocket 进行所有通信。
 
-**Additional Issue:** The gateway's `WrapIngress` function does not inject `user_id` into the context, but the lobby service expects `ctx.Value("user_id")` for authenticated requests. This must be fixed.
+**额外问题：** 网关的 `WrapIngress` 函数没有将 `user_id` 注入到 context 中，但后端服务期望通过 `ctx.Value("user_id")` 获取用户 ID。这个问题必须修复。
 
 ---
 
-## Solution: WebSocket API Client
+## 解决方案：WebSocket API 客户端
 
-### Architecture Overview
+### 架构概览
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Web Browser                                            │
+│  Web 浏览器                                              │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  api.js (WsClient)                              │   │
-│  │  - connect() → WebSocket connection             │   │
+│  │  - connect() → 建立 WebSocket 连接              │   │
 │  │  - call(method, payload) → Promise              │   │
-│  │  - Message correlation by method field          │   │
+│  │  - 通过 method 字段匹配请求/响应                 │   │
 │  └─────────────────────────────────────────────────┘   │
 │           │                                              │
 │  ┌────────┴───────┬───────────┬───────────┐            │
@@ -50,14 +50,14 @@ There is no `/api/*` HTTP REST endpoint. The web client needs to use WebSocket f
                          │ WebSocket
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Gateway (:8080)                                        │
-│  /ws → WebSocket Handler → Route → Backend gRPC        │
+│  网关 (:8080)                                            │
+│  /ws → WebSocket Handler → 路由 → 后端 gRPC             │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Message Protocol
+### 消息协议
 
-**Request Format:**
+**请求格式：**
 ```json
 {
   "method": "/user.v1.UserService/Login",
@@ -65,7 +65,7 @@ There is no `/api/*` HTTP REST endpoint. The web client needs to use WebSocket f
 }
 ```
 
-**Response Format:**
+**响应格式：**
 ```json
 {
   "method": "/user.v1.UserService/Login",
@@ -75,87 +75,87 @@ There is no `/api/*` HTTP REST endpoint. The web client needs to use WebSocket f
 }
 ```
 
-**Error Response:**
+**错误响应：**
 ```json
 {
   "method": "/user.v1.UserService/Login",
   "code": 16,
-  "msg": "invalid username or password",
+  "msg": "用户名或密码错误",
   "data": null
 }
 ```
 
-### WsClient Class
+### WsClient 类
 
 ```javascript
 class WsClient {
   constructor(url)
-  connect()                    // Establish WebSocket connection
-  disconnect()                 // Close connection
-  isConnected()                // Check connection state
-  call(method, payload)        // Generic API call, returns Promise
+  connect()                    // 建立 WebSocket 连接
+  disconnect()                 // 关闭连接
+  isConnected()                // 检查连接状态
+  call(method, payload)        // 通用 API 调用，返回 Promise
 
-  // Convenience methods
+  // 便捷方法
   login(username, password)
   register(username, password)
   getCheckinStatus()
   checkin()
   getMyItems()
 
-  // Token management
+  // Token 管理
   saveToken(token)
   getToken()
   clearToken()
 }
 ```
 
-### Connection Flow
+### 连接流程
 
-**Unauthenticated Pages (login.html, register.html):**
-1. Page loads
-2. Create WsClient instance
-3. Call `connect()` to establish WebSocket
-4. Call `login()` or `register()`
-5. On success, save token and redirect
+**未认证页面（login.html, register.html）：**
+1. 页面加载
+2. 创建 WsClient 实例
+3. 调用 `connect()` 建立 WebSocket 连接
+4. 调用 `login()` 或 `register()`
+5. 成功后保存 token 并跳转
 
-**Authenticated Pages (checkin.html, items.html, index.html):**
-1. Page loads
-2. Check for existing token
-3. If no token, redirect to login
-4. Create WsClient instance
-5. Call `connect()` to establish WebSocket
-6. Make authenticated API calls
+**已认证页面（checkin.html, items.html, index.html）：**
+1. 页面加载
+2. 检查是否存在 token
+3. 如果没有 token，跳转到登录页
+4. 创建 WsClient 实例
+5. 调用 `connect()` 建立 WebSocket 连接
+6. 发起已认证的 API 调用
 
-### Error Handling
+### 错误处理
 
-| Code | Meaning | Action |
-|------|---------|--------|
-| 0 | Success | Process data |
-| 16 | Unauthenticated | Redirect to login |
-| 3 | InvalidArgument | Show error message |
-| 6 | AlreadyExists | Show "username exists" |
-| Other | Other error | Show error message |
+| 错误码 | 含义 | 处理方式 |
+|--------|------|----------|
+| 0 | 成功 | 处理数据 |
+| 16 | 未认证 | 跳转到登录页 |
+| 3 | 参数错误 | 显示错误信息 |
+| 6 | 已存在 | 显示"用户名已存在" |
+| 其他 | 其他错误 | 显示错误信息 |
 
-| Scenario | Behavior |
-|----------|----------|
-| Connection failed | Show error message with retry button |
-| Request timeout (5s) | Show "请求超时" error |
-| WebSocket closed | Show "连接断开" error |
+| 场景 | 行为 |
+|------|------|
+| 连接失败 | 显示错误信息并提供重试按钮 |
+| 请求超时 (5秒) | 显示"请求超时"错误 |
+| WebSocket 关闭 | 显示"连接断开"错误 |
 
 ---
 
-## Backend Changes
+## 后端改动
 
-### 1. `gateway/internal/ws/wrapper.go` (Modify)
+### 1. `gateway/internal/ws/wrapper.go` (修改)
 
-**Problem:** `WrapIngress` does not inject `user_id` into context, but backend services expect `ctx.Value("user_id")`.
+**问题：** `WrapIngress` 没有将 `user_id` 注入到 context 中，但后端服务期望 `ctx.Value("user_id")`。
 
-**Fix:** Update `WrapIngress` to inject `meta.userID` into context when user is authenticated.
+**修复：** 更新 `WrapIngress`，在用户已认证时将 `meta.userID` 注入到 context。
 
 ```go
 func WrapIngress(cli gatewayv1.GatewayIngressClient, route string) WsHandlerFunc {
     return func(ctx context.Context, payload []byte, meta *clientMeta) (*WsHandlerResult, error) {
-        // Inject user_id into context if authenticated
+        // 如果已认证，将 user_id 注入到 context
         if meta.userID > 0 {
             ctx = context.WithValue(ctx, "user_id", meta.userID)
         }
@@ -174,104 +174,104 @@ func WrapIngress(cli gatewayv1.GatewayIngressClient, route string) WsHandlerFunc
 
 ---
 
-## Frontend Changes
+## 前端改动
 
-### 1. `web/js/api.js` (Rewrite)
+### 1. `web/js/api.js` (重写)
 
-**New Implementation:**
-- WsClient class with WebSocket connection management
-- Promise-based `call()` method for request/response correlation
-- Convenience methods: `login()`, `register()`, `checkin()`, `getCheckinStatus()`, `getMyItems()`
-- Token storage in localStorage
-- Connection state management
+**新实现：**
+- WsClient 类，包含 WebSocket 连接管理
+- Promise 风格的 `call()` 方法，用于请求/响应关联
+- 便捷方法：`login()`、`register()`、`checkin()`、`getCheckinStatus()`、`getMyItems()`
+- Token 存储在 localStorage
+- 连接状态管理
 
-### 2. `web/login.html` (Modify)
+### 2. `web/login.html` (修改)
 
-**Changes:**
-- Create WsClient instance on page load
-- Call `wsClient.login()` instead of `login()` (HTTP fetch)
-- Handle connection errors
-- On success: save token, redirect to `/`
+**改动：**
+- 页面加载时创建 WsClient 实例
+- 调用 `wsClient.login()` 替代 `login()` (HTTP fetch)
+- 处理连接错误
+- 成功后：保存 token，跳转到 `/`
 
-### 3. `web/register.html` (Modify)
+### 3. `web/register.html` (修改)
 
-**Changes:**
-- Create WsClient instance on page load
-- Call `wsClient.register()` instead of `register()` (HTTP fetch)
-- Handle connection errors
-- On success: redirect to login page
+**改动：**
+- 页面加载时创建 WsClient 实例
+- 调用 `wsClient.register()` 替代 `register()` (HTTP fetch)
+- 处理连接错误
+- 成功后：跳转到登录页
 
-### 4. `web/checkin.html` (Modify)
+### 4. `web/checkin.html` (修改)
 
-**Changes:**
-- Create WsClient instance on page load
-- Call `wsClient.getCheckinStatus()` instead of `getCheckinStatus()`
-- Call `wsClient.checkin()` instead of `checkin()`
-- Handle connection errors and auth errors
+**改动：**
+- 页面加载时创建 WsClient 实例
+- 调用 `wsClient.getCheckinStatus()` 替代 `getCheckinStatus()`
+- 调用 `wsClient.checkin()` 替代 `checkin()`
+- 处理连接错误和认证错误
 
-### 5. `web/items.html` (Modify)
+### 5. `web/items.html` (修改)
 
-**Changes:**
-- Create WsClient instance on page load
-- Call `wsClient.getMyItems()` instead of `getMyItems()`
-- Handle connection errors and auth errors
+**改动：**
+- 页面加载时创建 WsClient 实例
+- 调用 `wsClient.getMyItems()` 替代 `getMyItems()`
+- 处理连接错误和认证错误
 
-### 6. `web/index.html` (Modify)
+### 6. `web/index.html` (修改)
 
-**Changes:**
-- Create WsClient instance on page load
-- Update auth check to use new token management
-
----
-
-## Testing Strategy
-
-### Manual Testing
-
-1. **Registration Flow:**
-   - Open `/register.html`
-   - Enter username and password
-   - Submit form
-   - Verify registration succeeds
-   - Verify redirect to login page
-
-2. **Login Flow:**
-   - Open `/login.html`
-   - Enter registered credentials
-   - Submit form
-   - Verify login succeeds
-   - Verify redirect to index page
-   - Verify token stored in localStorage
-
-3. **Checkin Flow:**
-   - Navigate to `/checkin.html`
-   - Verify status loads correctly
-   - Click checkin button
-   - Verify rewards displayed
-
-4. **Items Flow:**
-   - Navigate to `/items.html`
-   - Verify items load correctly
-
-5. **Error Cases:**
-   - Try registering with existing username
-   - Try logging in with wrong password
-   - Disconnect network, verify error handling
+**改动：**
+- 页面加载时创建 WsClient 实例
+- 更新认证检查，使用新的 token 管理
 
 ---
 
-## Constraints
+## 测试策略
 
-- Single WebSocket connection per page
-- No message ID correlation (use method field for matching)
-- Token stored in localStorage
-- Connection timeout: 5 seconds
-- Request timeout: 5 seconds
+### 手动测试
+
+1. **注册流程：**
+   - 打开 `/register.html`
+   - 输入用户名和密码
+   - 提交表单
+   - 验证注册成功
+   - 验证跳转到登录页
+
+2. **登录流程：**
+   - 打开 `/login.html`
+   - 输入已注册的凭据
+   - 提交表单
+   - 验证登录成功
+   - 验证跳转到首页
+   - 验证 token 存储在 localStorage
+
+3. **签到流程：**
+   - 导航到 `/checkin.html`
+   - 验证状态正确加载
+   - 点击签到按钮
+   - 验证奖励显示正确
+
+4. **物品流程：**
+   - 导航到 `/items.html`
+   - 验证物品正确加载
+
+5. **错误情况：**
+   - 尝试用已存在的用户名注册
+   - 尝试用错误的密码登录
+   - 断开网络，验证错误处理
 
 ---
 
-## Out of Scope
+## 约束
 
-- WebSocket reconnection (future enhancement)
-- Heartbeat/ping-pong from client (server handles this)
-- Multiple concurrent requests correlation (current protocol uses method matching)
+- 每个页面单一 WebSocket 连接
+- 不使用消息 ID 关联（使用 method 字段匹配）
+- Token 存储在 localStorage
+- 连接超时：5 秒
+- 请求超时：5 秒
+
+---
+
+## 不在范围内
+
+- WebSocket 重连（未来增强）
+- 客户端心跳/ping-pong（服务端处理）
+- 多并发请求关联（当前协议使用 method 匹配）
