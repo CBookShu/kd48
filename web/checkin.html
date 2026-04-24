@@ -34,9 +34,21 @@
   <script src="/js/api.js"></script>
   <script src="/js/checkin.js"></script>
   <script>
-    if (checkAuth()) {
-      loadStatus();
+    async function init() {
+      if (!checkAuth()) {
+        return;
+      }
+
+      try {
+        await initClient();
+        await loadStatus();
+      } catch (err) {
+        console.error('初始化失败:', err);
+        document.getElementById('status').textContent = '连接失败: ' + err.message;
+      }
     }
+
+    init();
   </script>
 </body>
 </html>

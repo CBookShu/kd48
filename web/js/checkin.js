@@ -1,5 +1,13 @@
 // web/js/checkin.js
 
+let client = null;
+
+// 初始化 WebSocket 客户端
+async function initClient() {
+  client = getWsClient();
+  await client.connect();
+}
+
 // 渲染签到状态
 function renderStatus(data) {
   const statusDiv = document.getElementById('status');
@@ -57,15 +65,24 @@ function renderReward(data) {
 
 // 加载签到状态
 async function loadStatus() {
+  if (!client) {
+    await initClient();
+  }
+
   try {
-    const resp = await getCheckinStatus(getToken());
+    const resp = await client.getCheckinStatus();
     if (resp.code === 0) {
       renderStatus(resp.data);
+    } else if (resp.code === 16) {
+      // 未认证，跳转登录
+      alert('请先登录');
+      window.location.href = '/login.html';
     } else {
-      alert(resp.message);
+      alert(resp.msg || '加载状态失败');
     }
   } catch (err) {
     console.error('加载状态失败:', err);
+    alert('网络错误: ' + err.message);
   }
 }
 
@@ -75,18 +92,21 @@ async function doCheckin() {
   btn.disabled = true;
 
   try {
-    const resp = await checkin(getToken());
+    const resp = await client.checkin();
     if (resp.code === 0) {
       renderReward(resp.data);
       await loadStatus();
     } else if (resp.code === 200) {
       alert('今日已签到');
+    } else if (resp.code === 16) {
+      alert('请先登录');
+      window.location.href = '/login.html';
     } else {
-      alert(resp.message);
+      alert(resp.msg || '签到失败');
     }
   } catch (err) {
     console.error('签到失败:', err);
-    alert('网络错误');
+    alert('网络错误: ' + err.message);
   } finally {
     btn.disabled = false;
   }
