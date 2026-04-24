@@ -1,5 +1,9 @@
 // web/js/api.js - WebSocket API 客户端
 
+// Timeout constants (in milliseconds)
+const CONNECT_TIMEOUT = 5000;
+const REQUEST_TIMEOUT = 5000;
+
 class WsClient {
   constructor(url = 'ws://localhost:8080/ws') {
     this.url = url;
@@ -11,16 +15,24 @@ class WsClient {
   // 建立 WebSocket 连接
   connect() {
     if (this.connectPromise) {
-      return this.connectPromise;
+      // 检查 promise 是否已完成（无论成功或失败）
+      // 如果已完成，需要创建新的连接
+      if (this.isConnected()) {
+        return this.connectPromise;
+      }
+      // 如果连接失败或未连接，重置 connectPromise 以允许重试
+      this.connectPromise = null;
     }
 
     this.connectPromise = new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.url);
 
       const timeout = setTimeout(() => {
+        // 清理 connectPromise 以允许重试
+        this.connectPromise = null;
         reject(new Error('连接超时'));
         this.ws.close();
-      }, 5000);
+      }, CONNECT_TIMEOUT);
 
       this.ws.onopen = () => {
         clearTimeout(timeout);
@@ -101,7 +113,7 @@ class WsClient {
       const timeout = setTimeout(() => {
         this.pendingCalls.delete(method);
         reject(new Error('请求超时'));
-      }, 5000);
+      }, REQUEST_TIMEOUT);
 
       // 保存待处理的调用
       this.pendingCalls.set(method, { resolve, reject, timeout });
