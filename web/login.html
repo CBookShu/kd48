@@ -42,7 +42,7 @@
 
       try {
         const resp = await client.login(username, password);
-        if (resp.code === 0) {
+        if (resp.code === 0 && resp.data?.token) {
           client.saveToken(resp.data.token);
           window.location.href = '/';
         } else {
