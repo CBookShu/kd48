@@ -23,16 +23,29 @@
 
   <script src="/js/api.js"></script>
   <script>
+    const client = getWsClient();
+
     async function loadItems() {
       try {
-        const resp = await getMyItems(getToken());
+        await client.connect();
+      } catch (err) {
+        document.getElementById('items').textContent = '连接失败: ' + err.message;
+        return;
+      }
+
+      try {
+        const resp = await client.getMyItems();
         if (resp.code === 0) {
           renderItems(resp.data);
+        } else if (resp.code === 16) {
+          // 未认证，跳转登录
+          alert('请先登录');
+          window.location.href = '/login.html';
         } else {
-          document.getElementById('items').textContent = resp.message;
+          document.getElementById('items').textContent = resp.msg || '加载失败';
         }
       } catch (err) {
-        document.getElementById('items').textContent = '网络错误';
+        document.getElementById('items').textContent = '网络错误: ' + err.message;
       }
     }
 
