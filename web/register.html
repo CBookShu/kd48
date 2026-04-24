@@ -25,27 +25,38 @@
 
   <script src="/js/api.js"></script>
   <script>
+    const client = getWsClient();
+
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const password2 = document.getElementById('password2').value;
+      const errorEl = document.getElementById('error');
 
       if (password !== password2) {
-        document.getElementById('error').textContent = '密码不一致';
+        errorEl.textContent = '密码不一致';
         return;
       }
 
       try {
-        const resp = await register(username, password);
+        // 建立连接
+        await client.connect();
+      } catch (err) {
+        errorEl.textContent = '连接失败: ' + err.message;
+        return;
+      }
+
+      try {
+        const resp = await client.register(username, password);
         if (resp.code === 0) {
           alert('注册成功，请登录');
           window.location.href = '/login.html';
         } else {
-          document.getElementById('error').textContent = resp.message;
+          errorEl.textContent = resp.msg || '注册失败';
         }
       } catch (err) {
-        document.getElementById('error').textContent = '网络错误';
+        errorEl.textContent = err.message;
       }
     });
   </script>
