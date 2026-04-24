@@ -4,8 +4,16 @@ let client = null;
 
 // 初始化 WebSocket 客户端
 async function initClient() {
+  if (client && client.isConnected()) {
+    return;  // Already connected
+  }
   client = getWsClient();
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (err) {
+    console.error('连接失败:', err);
+    throw err;  // Re-throw so caller can handle
+  }
 }
 
 // 渲染签到状态
@@ -88,6 +96,9 @@ async function loadStatus() {
 
 // 执行签到
 async function doCheckin() {
+  if (!client) {
+    await initClient();
+  }
   const btn = document.getElementById('checkinBtn');
   btn.disabled = true;
 
