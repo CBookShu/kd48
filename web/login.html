@@ -24,26 +24,37 @@
 
   <script src="/js/api.js"></script>
   <script>
+    const client = getWsClient();
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error');
 
       try {
-        const resp = await login(username, password);
+        // 建立连接
+        await client.connect();
+      } catch (err) {
+        errorEl.textContent = '连接失败: ' + err.message;
+        return;
+      }
+
+      try {
+        const resp = await client.login(username, password);
         if (resp.code === 0) {
-          saveToken(resp.data.token);
+          client.saveToken(resp.data.token);
           window.location.href = '/';
         } else {
-          document.getElementById('error').textContent = resp.message;
+          errorEl.textContent = resp.msg || '登录失败';
         }
       } catch (err) {
-        document.getElementById('error').textContent = '网络错误';
+        errorEl.textContent = err.message;
       }
     });
 
     // 已登录则跳转首页
-    if (getToken()) {
+    if (client.getToken()) {
       window.location.href = '/';
     }
   </script>
