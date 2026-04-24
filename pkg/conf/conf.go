@@ -30,6 +30,7 @@ type GatewayConf struct {
 	Port                    int    `mapstructure:"port"`
 	MetaServiceTypesPrefix  string `mapstructure:"meta_service_types_prefix"`
 	MetaGatewayRoutesPrefix string `mapstructure:"meta_gateway_routes_prefix"`
+	StaticDir               string `mapstructure:"static_dir"` // 静态文件目录，如 "./web"
 }
 
 type UserServiceConf struct {

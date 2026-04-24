@@ -6,6 +6,7 @@ gateway:
   port: 8080
   meta_service_types_prefix: "kd48/meta/service-types/"
   meta_gateway_routes_prefix: "kd48/meta/gateway-routes/"
+  static_dir: "./web"  # 静态文件目录
   # 心跳配置（服务端被动模式）
   heartbeat:
     server_timeout: 90s    # 无活动超时时间（客户端应每 30s 发送心跳）

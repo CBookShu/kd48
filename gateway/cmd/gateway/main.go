@@ -119,7 +119,7 @@ func main() {
 		DisableStartupMessage: true,
 	})
 
-	SetupRoutes(app, wsHandler)
+	SetupRoutes(app, wsHandler, c.Gateway.StaticDir)
 
 	go func() {
 		slog.Info("Gateway Fiber WS server listening", "port", c.Gateway.Port)
