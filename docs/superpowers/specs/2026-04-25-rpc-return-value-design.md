@@ -65,6 +65,112 @@ grpc.SendHeader(ctx, md)
 
 ---
 
+## 公共 ApiResponse 定义
+
+### 文件结构
+```
+api/proto/
+├── common/
+│   └── v1/
+│       └── api_response.proto    # 公共 ApiResponse
+├── user/
+│   └── v1/
+│       └── user.proto
+└── lobby/
+    └── v1/
+        ├── checkin.proto
+        └── ...
+```
+
+### api/proto/common/v1/api_response.proto
+```protobuf
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/common/v1;commonv1";
+
+import "google/protobuf/any.proto";
+
+// ApiResponse 通用响应外壳（所有服务共用）
+message ApiResponse {
+  int32 code = 1;
+  string message = 2;
+  google.protobuf.Any data = 3;
+  map<string, string> meta = 4;  // 扩展属性
+}
+
+// ErrorCode 错误码定义（所有服务共用）
+enum ErrorCode {
+  SUCCESS = 0;
+
+  // 通用错误 1-99
+  INVALID_REQUEST = 1;
+  INTERNAL_ERROR = 2;
+  SERVICE_UNAVAILABLE = 3;
+
+  // 用户相关 100-199
+  USER_NOT_FOUND = 100;
+  USER_NOT_AUTHENTICATED = 101;
+
+  // 签到相关 200-299
+  CHECKIN_ALREADY_TODAY = 200;
+  CHECKIN_PERIOD_NOT_ACTIVE = 201;
+  CHECKIN_PERIOD_EXPIRED = 202;
+
+  // 物品相关 300-399
+  ITEM_NOT_FOUND = 300;
+  ITEM_INSUFFICIENT = 301;
+}
+```
+
+### 网关转换代码示例
+```go
+import (
+    commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
+)
+
+// 将 gRPC 错误转为 ApiResponse
+func toApiResponse(err error) *commonv1.ApiResponse {
+    if err == nil {
+        return &commonv1.ApiResponse{Code: 0}
+    }
+    st, ok := status.FromError(err)
+    if !ok {
+        return &commonv1.ApiResponse{
+            Code:    2, // INTERNAL_ERROR
+            Message: err.Error(),
+        }
+    }
+    return &commonv1.ApiResponse{
+        Code:    errorCodeFromGRPC(st.Code()),
+        Message: st.Message(),
+    }
+}
+
+// gRPC Code -> ErrorCode 映射
+func errorCodeFromGRPC(code codes.Code) int32 {
+    switch code {
+    case codes.OK:
+        return 0
+    case codes.InvalidArgument:
+        return 1
+    case codes.Internal:
+        return 2
+    case codes.Unavailable:
+        return 3
+    case codes.Unauthenticated:
+        return 101
+    case codes.NotFound:
+        return 100
+    default:
+        return 2
+    }
+}
+```
+
+---
+
 ## 统一错误码映射
 
 | gRPC Code | ErrorCode | 说明 |
@@ -80,53 +186,22 @@ grpc.SendHeader(ctx, md)
 
 ## 需要修改的文件
 
-### Proto 文件
+### 新建公共包
+- `api/proto/common/v1/api_response.proto` - 公共 ApiResponse 定义
+
+### Proto 文件（删除 lobby 包的 ApiResponse）
+- `api/proto/lobby/v1/common.proto` - 删除 ApiResponse 定义
 - `api/proto/lobby/v1/checkin.proto` - 改为直接返回 CheckinData / CheckinStatusData
 
+### 生成的 Go 代码
+- 重新生成 `api/proto/common/v1/` 包
+- 更新所有 import 引用
+
 ### 网关层
-- `gateway/cmd/gateway/ingress.go` - 添加 gRPC status → ApiResponse 转换逻辑
-- 或创建独立的 error mapper
+- `gateway/cmd/gateway/ingress.go` - 使用 commonv1.ApiResponse，添加 gRPC status → ApiResponse 转换逻辑
 
 ### 服务端
 - `services/lobby/cmd/lobby/checkin_server.go` - 改用 status.Errorf
 
 ### 客户端 (CLI)
-- `cmd/cli/internal/commands/handler.go` - 移除对 Success 字段的检查，只检查 Code
-- `cmd/cli/internal/client/gateway.go` - 无变化（已经处理 ApiResponse）
-
----
-
-## 示例：修改后的 Checkin RPC
-
-**Proto:**
-```protobuf
-service CheckinService {
-  rpc Checkin(CheckinRequest) returns (CheckinData);
-  rpc GetStatus(GetStatusRequest) returns (CheckinStatusData);
-}
-```
-
-**服务端:**
-```go
-func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
-    if s.period == nil {
-        return nil, status.Errorf(codes.Unavailable, "no active period")
-    }
-    // ... 业务逻辑
-    return &lobbyv1.CheckinData{
-        ContinuousDays: int32(status.ContinuousDays),
-        Rewards:        rewards,
-    }, nil
-}
-```
-
-**网关转换:**
-```go
-// 将 gRPC 错误转为 ApiResponse
-if st, ok := status.FromError(err); ok {
-    return &lobbyv1.ApiResponse{
-        Code:    errorCodeFromGRPC(st.Code()),
-        Message: st.Message(),
-    }, nil
-}
-```
+- `cmd/cli/internal/commands/handler.go` - 更新 import 为 commonv1，移除对 Success 字段的检查
