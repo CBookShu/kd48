@@ -23,6 +23,21 @@ type userRegisterResp struct {
 	UserID  int64  `json:"userId"`
 }
 
+// checkinDoResp 签到响应
+type checkinDoResp struct {
+	Success bool `json:"success"`
+}
+
+// checkinStatusResp 签到状态响应
+type checkinStatusResp struct {
+	Success        bool   `json:"success"`
+	PeriodID       int64  `json:"periodId"`
+	PeriodName     string `json:"periodName"`
+	TodayChecked   bool   `json:"todayChecked"`
+	ContinuousDays int32  `json:"continuousDays"`
+	TotalDays      int32  `json:"totalDays"`
+}
+
 // Handler 命令处理器
 type Handler struct {
 	gateway *client.Gateway
@@ -225,14 +240,90 @@ func (h *Handler) userWhoami() string {
 		h.state.ContinuousDays)
 }
 
-// checkinDo 每日签到 - stub
+// checkinDo 执行签到
 func (h *Handler) checkinDo() string {
-	return "[TODO] checkinDo"
+	if !h.state.IsLoggedIn {
+		return "[错误] 请先登录"
+	}
+
+	// 注意：Gateway 已经通过 WebSocket 连接认证，
+	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
+	payload := map[string]string{}
+
+	resp, err := h.gateway.Send(nil, "/lobby.v1.CheckinService/Checkin", payload)
+	if err != nil {
+		return fmt.Sprintf("[错误] %v", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Sprintf("[错误] %s", resp.Msg)
+	}
+
+	// 解析响应
+	data, _ := json.Marshal(resp.Data)
+	var checkinResp checkinDoResp
+	if err := json.Unmarshal(data, &checkinResp); err != nil {
+		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
+	}
+
+	if !checkinResp.Success {
+		return "[错误] 签到失败"
+	}
+
+	// 更新状态
+	h.state.TodayChecked = true
+	h.state.ContinuousDays++
+
+	return fmt.Sprintf("[成功] 签到成功！连续签到: %d 天", h.state.ContinuousDays)
 }
 
-// checkinStatus 查看签到状态 - stub
+// checkinStatus 查看签到状态
 func (h *Handler) checkinStatus() string {
-	return "[TODO] checkinStatus"
+	if !h.state.IsLoggedIn {
+		return "[错误] 请先登录"
+	}
+
+	// 注意：Gateway 已经通过 WebSocket 连接认证，
+	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
+	payload := map[string]string{}
+
+	resp, err := h.gateway.Send(nil, "/lobby.v1.CheckinService/GetStatus", payload)
+	if err != nil {
+		return fmt.Sprintf("[错误] %v", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Sprintf("[错误] %s", resp.Msg)
+	}
+
+	// 解析响应
+	data, _ := json.Marshal(resp.Data)
+	var statusResp checkinStatusResp
+	if err := json.Unmarshal(data, &statusResp); err != nil {
+		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
+	}
+
+	// 更新状态
+	h.state.TodayChecked = statusResp.TodayChecked
+	h.state.ContinuousDays = int(statusResp.ContinuousDays)
+
+	checkStr := "✗ 未签到"
+	if statusResp.TodayChecked {
+		checkStr = "✓ 已签到"
+	}
+
+	return fmt.Sprintf(`┌─────────────────────────────────────────┐
+│  Check-in Status                       │
+├─────────────────────────────────────────┤
+│  Period:     %-25s│
+│  Today:      %-25s│
+│  Streak:     %-25d days│
+│  Total:      %-25d days│
+└─────────────────────────────────────────┘`,
+		statusResp.PeriodName,
+		checkStr,
+		statusResp.ContinuousDays,
+		statusResp.TotalDays)
 }
 
 // items 查看背包 - stub
