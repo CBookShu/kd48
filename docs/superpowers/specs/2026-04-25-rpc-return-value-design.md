@@ -40,11 +40,9 @@ return &CheckinData{ContinuousDays: 1}, nil
 ```
 
 **网关转换层 (ingress)：**
-- gRPC OK (code=0) → ApiResponse Code=0
-- gRPC InvalidArgument (code=3) → ApiResponse Code=1
-- gRPC Unauthenticated (code=16) → ApiResponse Code=101
-- gRPC Internal (code=13) → ApiResponse Code=2
-- ... 其他错误码映射
+- 直接透传 gRPC status 的 code 和 message
+- 不做映射，不做转换
+- 服务端返回 codes.Code(3000)，客户端收到 Code=3000
 
 ### 3. 扩展属性
 
@@ -102,26 +100,27 @@ message ApiResponse {
 }
 
 // ErrorCode 错误码定义（所有服务共用，全局同步一份 proto）
+// 规则：每个模块预分配 1000 个码
 enum ErrorCode {
   SUCCESS = 0;
 
-  // 通用错误 1-99
-  INVALID_REQUEST = 1;
-  INTERNAL_ERROR = 2;
-  SERVICE_UNAVAILABLE = 3;
+  // 系统错误 1000-1999
+  INVALID_REQUEST = 1000;
+  INTERNAL_ERROR = 1001;
+  SERVICE_UNAVAILABLE = 1002;
 
-  // 用户相关 100-199
-  USER_NOT_FOUND = 100;
-  USER_NOT_AUTHENTICATED = 101;
+  // 用户相关 2000-2999
+  USER_NOT_FOUND = 2000;
+  USER_NOT_AUTHENTICATED = 2001;
 
-  // 签到相关 200-299
-  CHECKIN_ALREADY_TODAY = 200;
-  CHECKIN_PERIOD_NOT_ACTIVE = 201;
-  CHECKIN_PERIOD_EXPIRED = 202;
+  // 签到相关 3000-3999
+  CHECKIN_ALREADY_TODAY = 3000;
+  CHECKIN_PERIOD_NOT_ACTIVE = 3001;
+  CHECKIN_PERIOD_EXPIRED = 3002;
 
-  // 物品相关 300-399
-  ITEM_NOT_FOUND = 300;
-  ITEM_INSUFFICIENT = 301;
+  // 物品相关 4000-4999
+  ITEM_NOT_FOUND = 4000;
+  ITEM_INSUFFICIENT = 4001;
 }
 ```
 
@@ -172,7 +171,7 @@ var ErrorMessages = map[int32]string{
 **失败：**
 ```json
 {
-  "code": 200,
+  "code": 3000,
   "message": "今日已签到",
   "data": null
 }
@@ -193,7 +192,7 @@ func toApiResponse(err error) *commonv1.ApiResponse {
     st, ok := status.FromError(err)
     if !ok {
         return &commonv1.ApiResponse{
-            Code:    int32(commonv1.ErrorCode_INTERNAL_ERROR),
+            Code:    int32(commonv1.ErrorCode_INTERNAL_ERROR), // 1001
             Message: err.Error(),
         }
     }
@@ -406,7 +405,7 @@ func (s *UserService) GetUser(ctx context.Context, req *userv1.GetUserRequest) (
 - `gateway/cmd/gateway/ingress.go` - 使用 commonv1.ApiResponse，透传 gRPC status 的 code 和 message
 
 ### 服务端
-- `services/lobby/cmd/lobby/checkin_server.go` - 改用 status.Errorf(codes.Code(200), "message")
+- `services/lobby/cmd/lobby/checkin_server.go` - 改用 status.Errorf(codes.Code(3000), "message")
 - `services/user/...` - 同样改为 status.Errorf（如果还没改）
 
 ### 客户端 (CLI)
