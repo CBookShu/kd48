@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/CBookShu/kd48/cli/internal/client"
@@ -36,6 +37,12 @@ type checkinStatusResp struct {
 	TodayChecked   bool   `json:"todayChecked"`
 	ContinuousDays int32  `json:"continuousDays"`
 	TotalDays      int32  `json:"totalDays"`
+}
+
+// itemsResp 物品响应
+type itemsResp struct {
+	Success bool   `json:"success"`
+	Items   string `json:"items"` // JSON string of map[int32]int64
 }
 
 // Handler 命令处理器
@@ -326,7 +333,57 @@ func (h *Handler) checkinStatus() string {
 		statusResp.TotalDays)
 }
 
-// items 查看背包 - stub
+// items 查看背包
 func (h *Handler) items() string {
-	return "[TODO] items"
+	if !h.state.IsLoggedIn {
+		return "[错误] 请先登录"
+	}
+
+	// 注意：Gateway 已经通过 WebSocket 连接认证，
+	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
+	payload := map[string]string{}
+
+	resp, err := h.gateway.Send(nil, "/lobby.v1.ItemService/GetMyItems", payload)
+	if err != nil {
+		return fmt.Sprintf("[错误] %v", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Sprintf("[错误] %s", resp.Msg)
+	}
+
+	// 解析响应
+	data, _ := json.Marshal(resp.Data)
+	var itemsResp itemsResp
+	if err := json.Unmarshal(data, &itemsResp); err != nil {
+		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
+	}
+
+	if !itemsResp.Success {
+		return "[错误] 获取物品失败"
+	}
+
+	// 解析 items JSON
+	var items map[int32]int64
+	if err := json.Unmarshal([]byte(itemsResp.Items), &items); err != nil {
+		return fmt.Sprintf("[错误] 解析物品数据失败: %v", err)
+	}
+
+	if len(items) == 0 {
+		return "[信息] 背包为空"
+	}
+
+	// 排序并显示
+	var ids []int32
+	for id := range items {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	result := "[成功] 背包物品:\n"
+	for _, id := range ids {
+		result += fmt.Sprintf("  - %d: %d\n", id, items[id])
+	}
+
+	return result
 }
