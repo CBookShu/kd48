@@ -135,24 +135,25 @@ errors.go 是可选的错误消息参考，用于：
 package commonv1
 
 // 错误消息参考表（可选，用于构造错误或文档）
-var ErrorMessages = map[ErrorCode]string{
-    // 系统错误 (gRPC 标准码)
-    ErrorCode(1):  "请求参数错误",
-    ErrorCode(2):  "内部错误",
-    ErrorCode(3):  "服务不可用",
-    
-    // 通用业务错误 (100-199)
-    ErrorCode(100): "用户不存在",
-    ErrorCode(101): "未认证",
-    
-    // 签到相关 (200-299)
-    ErrorCode(200): "今日已签到",
-    ErrorCode(201): "签到期未开启",
-    ErrorCode(202): "签到期已过期",
-    
-    // 物品相关 (300-399)
-    ErrorCode(300): "物品不存在",
-    ErrorCode(301): "物品不足",
+var ErrorMessages = map[int32]string{
+    // 系统错误 (1xxx)
+    1000: "请求参数错误",
+    1001: "内部错误",
+    1002: "服务不可用",
+    1003: "未认证",
+
+    // 用户相关 (2xxx)
+    2000: "用户不存在",
+    2001: "用户未认证",
+
+    // 签到相关 (3xxx)
+    3000: "今日已签到",
+    3001: "签到期未开启",
+    3002: "签到期已过期",
+
+    // 物品相关 (4xxx)
+    4000: "物品不存在",
+    4001: "物品不足",
 }
 ```
 
@@ -207,35 +208,48 @@ func toApiResponse(err error) *commonv1.ApiResponse {
 
 ---
 
-## 错误码分类（系统 vs 业务）
+## 错误码分类（类型 + 值）
 
-### 范围定义
+### 设计规则
 
-| 范围 | 来源 | 含义 |
-|------|------|------|
-| 0 | gRPC OK | 成功 |
-| 1-16 | gRPC 标准码 | 系统错误 (InvalidArgument, Internal, Unavailable...) |
-| 100-199 | 业务码 | 通用错误 |
-| 200-299 | 业务码 | 签到相关 |
-| 300-399 | 业务码 | 物品相关 |
-| 1000+ | 业务码 | 其他业务模块 |
+**高2位 = 类型**（十位百位）
+**低2位 = 值**（个位十位）
 
-### 设计原则
+```
+1xxx  系统错误
+2xxx  用户相关
+3xxx  签到相关
+4xxx  物品相关
+...
+```
 
-**gRPC 标准码 (0-16)：系统错误**
-- 由 gRPC 框架生成
-- 如：InvalidArgument、NotFound、Internal、Unavailable
+### 具体定义
 
-**业务码 (100+)：业务错误**
-- 由业务代码主动返回
-- 如：`status.Errorf(codes.Code(200), "今日已签到")`
+| 错误码 | 含义 |
+|--------|------|
+| 0 | 成功 |
+| **1xxx 系统错误** | |
+| 1000 | 请求参数错误 |
+| 1001 | 内部错误 |
+| 1002 | 服务不可用 |
+| 1003 | 未认证（系统级） |
+| **2xxx 用户相关** | |
+| 2000 | 用户不存在 |
+| 2001 | 用户未认证 |
+| **3xxx 签到相关** | |
+| 3000 | 今日已签到 |
+| 3001 | 签到期未开启 |
+| 3002 | 签到期已过期 |
+| **4xxx 物品相关** | |
+| 4000 | 物品不存在 |
+| 4001 | 物品不足 |
 
 ### 网关透传规则
 
 ```go
 func toApiResponse(err error) *commonv1.ApiResponse {
     st, _ := status.FromError(err)
-    // gRPC code (0-16) 和业务 code (100+) 不会冲突
+    // 直接透传 code 和 message
     return &commonv1.ApiResponse{
         Code:    int32(st.Code()),
         Message: st.Message(),
@@ -249,9 +263,10 @@ func toApiResponse(err error) *commonv1.ApiResponse {
 
 ### 约定
 
-- 业务代码必须从 **100** 开始
-- 永远不使用 gRPC 标准码（0-16）作为业务错误
-- 业务错误使用 `codes.Code(200)` 格式返回
+- 业务错误使用 `codes.Code(3000)` 格式返回
+- 高位表示错误类型，低位表示具体错误
+- 类型内值可自行扩展（3003, 3004...）
+- gRPC 标准码 (0-16) 保留系统使用，业务不冲突
 
 ---
 
