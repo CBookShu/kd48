@@ -80,7 +80,7 @@ func PrintWelcome(isLoggedIn bool) {
 	}
 }
 
-// PrintStatus 打印状态栏
+// PrintStatus 打印状态栏（不打印提示符，提示符由 ReadLine 处理）
 func PrintStatus(username string, checked bool, streak int) {
 	status := "Not logged in"
 	if username != "" {
@@ -92,5 +92,4 @@ func PrintStatus(username string, checked bool, streak int) {
 	}
 	fmt.Printf("  Status: %s\n", status)
 	fmt.Println("────────────────────────────────────────────────────────────────")
-	fmt.Print("kd48> ")
 }

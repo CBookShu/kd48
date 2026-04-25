@@ -10,18 +10,37 @@ import (
 	"github.com/CBookShu/kd48/cli/internal/state"
 )
 
+// int64String 可以解析 JSON 中的数字或字符串形式的 int64
+type int64String int64
+
+func (i *int64String) UnmarshalJSON(data []byte) error {
+	// 去掉首尾空格
+	s := strings.TrimSpace(string(data))
+	// 去掉引号（如果是字符串）
+	s = strings.Trim(s, `"`)
+	// 解析
+	n, err := fmt.Sscanf(s, "%d", (*int64)(i))
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("cannot parse %s as int64", data)
+	}
+	return nil
+}
+
 // userLoginResp 登录响应
 type userLoginResp struct {
-	Success bool   `json:"success"`
-	Token   string `json:"token"`
-	UserID  int64  `json:"userId"`
+	Success bool       `json:"success"`
+	Token   string     `json:"token"`
+	UserID  int64String `json:"userId"`
 }
 
 // userRegisterResp 注册响应
 type userRegisterResp struct {
-	Success bool   `json:"success"`
-	Token   string `json:"token"`
-	UserID  int64  `json:"userId"`
+	Success bool       `json:"success"`
+	Token   string     `json:"token"`
+	UserID  int64String `json:"userId"`
 }
 
 // checkinDoResp 签到响应
@@ -108,7 +127,7 @@ func (h *Handler) Handle(input string) string {
 		return h.checkinDo()
 	case "checkin:status":
 		return h.checkinStatus()
-	case "items":
+	case "item:list":
 		return h.items()
 	default:
 		return fmt.Sprintf("[错误] 未知命令 '%s'，输入 'help' 查看可用命令", cmd)
@@ -125,7 +144,7 @@ func (h *Handler) help() string {
     user:whoami                         - Show current user
     checkin:do                          - Daily check-in
     checkin:status                      - View check-in status
-    items                               - View your items
+    item:list                           - View your items
     help                                - Show all commands
     quit / exit                         - Exit`
 	}
@@ -171,7 +190,7 @@ func (h *Handler) userLogin(args []string) string {
 	}
 
 	// 更新状态
-	h.state.SetUser(username, loginResp.UserID, loginResp.Token)
+	h.state.SetUser(username, int64(loginResp.UserID), loginResp.Token)
 
 	return fmt.Sprintf("[成功] 已登录，当前用户: %s", username)
 }
@@ -211,7 +230,7 @@ func (h *Handler) userRegister(args []string) string {
 	}
 
 	// 更新状态
-	h.state.SetUser(username, regResp.UserID, regResp.Token)
+	h.state.SetUser(username, int64(regResp.UserID), regResp.Token)
 
 	return fmt.Sprintf("[成功] 注册并登录成功，当前用户: %s", username)
 }

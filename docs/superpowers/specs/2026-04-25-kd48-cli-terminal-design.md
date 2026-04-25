@@ -67,12 +67,13 @@ internal/
 
 | 命令 | 参数 | 登录前 | 登录后 | 说明 |
 |------|------|--------|--------|------|
-| `login` | `username password` | ✓ | ✓ | 登录，登录后切换用户 |
-| `register` | `username password` | ✓ | ✓ | 注册新账户 |
-| `checkin` | - | ✗ | ✓ | 每日签到 |
-| `status` | - | ✗ | ✓ | 查看签到状态（详细）|
+| `user:login` | `username password` | ✓ | ✓ | 登录，登录后切换用户 |
+| `user:register` | `username password` | ✓ | ✓ | 注册新账户 |
+| `user:logout` | - | ✗ | ✓ | 登出 |
+| `user:whoami` | - | ✗ | ✓ | 查看当前用户 |
+| `checkin:do` | - | ✗ | ✓ | 每日签到 |
+| `checkin:status` | - | ✗ | ✓ | 查看签到状态（详细）|
 | `items` | - | ✗ | ✓ | 查看背包物品 |
-| `logout` | - | ✗ | ✓ | 登出 |
 | `help` | - | ✓ | ✓ | 显示帮助 |
 | `quit` / `exit` | - | ✓ | ✓ | 退出程序 |
 
@@ -97,10 +98,10 @@ internal/
   Welcome to KD48 CLI Terminal
 ══════════════════════════════════════════════════════════
   Available Commands:
-    login <username> <password>    - Login
-    register <username> <password> - Register new account
-    help                           - Show all commands
-    quit / exit                    - Exit
+    user:login <username> <password>    - Login
+    user:register <username> <password> - Register new account
+    help                                 - Show all commands
+    quit / exit                          - Exit
 ══════════════════════════════════════════════════════════
   Status: Not logged in
 ────────────────────────────────────────────────────────────────
@@ -114,14 +115,15 @@ kd48>
   Welcome to KD48 CLI Terminal
 ══════════════════════════════════════════════════════════
   Available Commands:
-    login <username> <password>    - Switch account
-    register <username> <password> - Register new account
-    checkin                        - Daily check-in
-    status                         - View check-in status
-    items                          - View your items
-    logout                         - Logout
-    help                           - Show all commands
-    quit / exit                    - Exit
+    user:login <username> <password>    - Switch account
+    user:register <username> <password> - Register new account
+    user:logout                         - Logout
+    user:whoami                         - Show current user
+    checkin:do                          - Daily check-in
+    checkin:status                      - View check-in status
+    items                               - View your items
+    help                                - Show all commands
+    quit / exit                         - Exit
 ══════════════════════════════════════════════════════════
   Status: Logged in as [john] | Checked: No | Streak: 3 days
 ────────────────────────────────────────────────────────────────
@@ -131,11 +133,11 @@ kd48>
 ### 4.3 命令执行示例
 
 ```
-kd48> login john 123456
+kd48> user:login john 123456
 [发送请求...]
 [成功] 已登录，当前用户: john
 
-kd48> checkin
+kd48> checkin:do
 [发送请求...]
 [成功] 签到成功！连续签到: 1 天
 获得奖励: {金币: 100}
@@ -146,7 +148,7 @@ kd48> items
   - 1001: 100  (金币)
   - 1002: 50   (体力)
 
-kd48> status
+kd48> checkin:status
 ┌─────────────────────────────────────────┐
 │  Player Status                          │
 ├─────────────────────────────────────────┤
@@ -165,16 +167,16 @@ Goodbye!
 ### 4.4 错误提示
 
 ```
-kd48> login
-[错误] 用法: login <username> <password>
+kd48> user:login
+[错误] 用法: user:login <username> <password>
 
-kd48> checkin
+kd48> checkin:do
 [错误] 请先登录
 
 kd48> unknowncommand
 [错误] 未知命令，输入 'help' 查看可用命令
 
-kd48> login wronguser wrongpass
+kd48> user:login wronguser wrongpass
 [错误] 用户名或密码错误
 ```
 
