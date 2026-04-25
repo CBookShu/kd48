@@ -3,30 +3,74 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
-	"github.com/gorilla/websocket"
-	"github.com/peterh/liner"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/CBookShu/kd48/cli/internal/client"
+	"github.com/CBookShu/kd48/cli/internal/commands"
+	"github.com/CBookShu/kd48/cli/internal/repl"
+	"github.com/CBookShu/kd48/cli/internal/state"
 )
 
 func main() {
-	// WebSocket client
-	wsConn, _, err := websocket.DefaultDialer.Dial("ws://localhost:8080/ws", nil)
-	if err != nil {
-		fmt.Println("WebSocket dial error:", err)
-	}
-	_ = wsConn
-	_ = liner.NewLiner
+	// 创建组件
+	gw := client.New()
+	st := state.New()
 
-	// gRPC connection
-	conn, err := grpc.NewClient("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		fmt.Println("gRPC dial error:", err)
+	// 连接到 Gateway
+	fmt.Println("[信息] 正在连接 Gateway...")
+	if err := gw.Connect(context.Background()); err != nil {
+		fmt.Printf("[错误] %v\n", err)
+		fmt.Println("请确保 Gateway 服务已启动 (localhost:8080)")
+		os.Exit(1)
 	}
-	_ = conn
-	_ = context.Background()
-	_ = protojson.MarshalOptions{}
-	_ = fmt.Sprintf
+	fmt.Println("[信息] 已连接到 Gateway")
+
+	// 创建命令处理器
+	handler := commands.New(gw, st)
+
+	// 创建 REPL
+	r := repl.New(func() string { return "kd48> " })
+
+	// 打印欢迎信息
+	repl.PrintWelcome(false)
+	repl.PrintStatus("", false, 0)
+
+	// REPL 循环
+	for {
+		input, err := r.ReadLine()
+		if err != nil {
+			// Ctrl+C 或 Ctrl+D
+			fmt.Println("\nGoodbye!")
+			break
+		}
+
+		if input == "" {
+			repl.PrintStatus(st.Username, st.TodayChecked, st.ContinuousDays)
+			continue
+		}
+
+		// 处理命令
+		result := handler.Handle(input)
+
+		// 检查退出
+		if result == "quit" {
+			fmt.Println("Goodbye!")
+			break
+		}
+
+		// 输出结果
+		if result != "" {
+			fmt.Println(result)
+		}
+
+		// 重新打印状态栏
+		repl.PrintStatus(st.Username, st.TodayChecked, st.ContinuousDays)
+
+		// 添加到历史
+		r.AddHistory(input)
+	}
+
+	// 清理
+	r.Close()
+	gw.Close()
 }
