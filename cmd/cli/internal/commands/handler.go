@@ -107,6 +107,10 @@ func (h *Handler) Handle(input string) string {
 		case "user:register":
 			return h.userRegister(args)
 		default:
+			// 检查是否是需要登录的命令
+			if h.isLoginRequiredCommand(cmd) {
+				return "[错误] 请先登录"
+			}
 			return fmt.Sprintf("[错误] 未知命令 '%s'，输入 'help' 查看可用命令", cmd)
 		}
 	}
@@ -151,6 +155,15 @@ func (h *Handler) help() string {
     user:register <username> <password> - Register new account
     help                                 - Show all commands
     quit / exit                          - Exit`
+}
+
+// isLoginRequiredCommand 检查命令是否需要登录
+func (h *Handler) isLoginRequiredCommand(cmd string) bool {
+	switch cmd {
+	case "user:logout", "user:whoami", "checkin:do", "checkin:status", "item:list":
+		return true
+	}
+	return false
 }
 
 // userLogin 处理登录
