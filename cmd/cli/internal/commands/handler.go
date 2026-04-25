@@ -1,12 +1,27 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/CBookShu/kd48/cli/internal/client"
 	"github.com/CBookShu/kd48/cli/internal/state"
 )
+
+// userLoginResp 登录响应
+type userLoginResp struct {
+	Success bool   `json:"success"`
+	Token   string `json:"token"`
+	UserID  int64  `json:"userId"`
+}
+
+// userRegisterResp 注册响应
+type userRegisterResp struct {
+	Success bool   `json:"success"`
+	Token   string `json:"token"`
+	UserID  int64  `json:"userId"`
+}
 
 // Handler 命令处理器
 type Handler struct {
@@ -99,24 +114,115 @@ func (h *Handler) help() string {
     quit / exit                          - Exit`
 }
 
-// userLogin 用户登录 - stub
+// userLogin 处理登录
 func (h *Handler) userLogin(args []string) string {
-	return "[TODO] userLogin"
+	if len(args) < 2 {
+		return "[错误] 用法: user:login <username> <password>"
+	}
+
+	username := args[0]
+	password := args[1]
+
+	payload := map[string]string{
+		"username": username,
+		"password": password,
+	}
+
+	resp, err := h.gateway.Send(nil, "/user.v1.UserService/Login", payload)
+	if err != nil {
+		return fmt.Sprintf("[错误] %v", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Sprintf("[错误] %s", resp.Msg)
+	}
+
+	// 解析响应数据
+	data, _ := json.Marshal(resp.Data)
+	var loginResp userLoginResp
+	if err := json.Unmarshal(data, &loginResp); err != nil {
+		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
+	}
+
+	if !loginResp.Success {
+		return "[错误] 用户名或密码错误"
+	}
+
+	// 更新状态
+	h.state.SetUser(username, loginResp.UserID, loginResp.Token)
+
+	return fmt.Sprintf("[成功] 已登录，当前用户: %s", username)
 }
 
-// userRegister 用户注册 - stub
+// userRegister 处理注册
 func (h *Handler) userRegister(args []string) string {
-	return "[TODO] userRegister"
+	if len(args) < 2 {
+		return "[错误] 用法: user:register <username> <password>"
+	}
+
+	username := args[0]
+	password := args[1]
+
+	payload := map[string]string{
+		"username": username,
+		"password": password,
+	}
+
+	resp, err := h.gateway.Send(nil, "/user.v1.UserService/Register", payload)
+	if err != nil {
+		return fmt.Sprintf("[错误] %v", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Sprintf("[错误] %s", resp.Msg)
+	}
+
+	// 解析响应数据
+	data, _ := json.Marshal(resp.Data)
+	var regResp userRegisterResp
+	if err := json.Unmarshal(data, &regResp); err != nil {
+		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
+	}
+
+	if !regResp.Success {
+		return "[错误] 注册失败，用户名可能已存在"
+	}
+
+	// 更新状态
+	h.state.SetUser(username, regResp.UserID, regResp.Token)
+
+	return fmt.Sprintf("[成功] 注册并登录成功，当前用户: %s", username)
 }
 
-// userLogout 用户登出 - stub
+// userLogout 处理登出
 func (h *Handler) userLogout() string {
-	return "[TODO] userLogout"
+	h.state.Reset()
+	return "[成功] 已登出"
 }
 
-// userWhoami 查看当前用户 - stub
+// userWhoami 查看当前用户
 func (h *Handler) userWhoami() string {
-	return "[TODO] userWhoami"
+	if !h.state.IsLoggedIn {
+		return "[错误] 请先登录"
+	}
+
+	checkedStr := "否"
+	if h.state.TodayChecked {
+		checkedStr = "是"
+	}
+
+	return fmt.Sprintf(`┌─────────────────────────────────────────┐
+│  Current User                          │
+├─────────────────────────────────────────┤
+│  Username:    %-25s│
+│  User ID:     %-25d│
+│  Checked in:  %-25s│
+│  Streak:      %-25d│
+└─────────────────────────────────────────┘`,
+		h.state.Username,
+		h.state.UserID,
+		checkedStr,
+		h.state.ContinuousDays)
 }
 
 // checkinDo 每日签到 - stub
