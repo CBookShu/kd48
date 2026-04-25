@@ -31,11 +31,11 @@ const (
 // 用户服务定义
 type UserServiceClient interface {
 	// 模拟登录获取凭证
-	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
+	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginData, error)
 	// 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
-	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterReply, error)
+	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterData, error)
 	// 验证 Token 并返回用户信息
-	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenReply, error)
+	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenData, error)
 }
 
 type userServiceClient struct {
@@ -46,9 +46,9 @@ func NewUserServiceClient(cc grpc.ClientConnInterface) UserServiceClient {
 	return &userServiceClient{cc}
 }
 
-func (c *userServiceClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error) {
+func (c *userServiceClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(LoginReply)
+	out := new(LoginData)
 	err := c.cc.Invoke(ctx, UserService_Login_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -56,9 +56,9 @@ func (c *userServiceClient) Login(ctx context.Context, in *LoginRequest, opts ..
 	return out, nil
 }
 
-func (c *userServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterReply, error) {
+func (c *userServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RegisterReply)
+	out := new(RegisterData)
 	err := c.cc.Invoke(ctx, UserService_Register_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -66,9 +66,9 @@ func (c *userServiceClient) Register(ctx context.Context, in *RegisterRequest, o
 	return out, nil
 }
 
-func (c *userServiceClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenReply, error) {
+func (c *userServiceClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VerifyTokenReply)
+	out := new(VerifyTokenData)
 	err := c.cc.Invoke(ctx, UserService_VerifyToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -83,11 +83,11 @@ func (c *userServiceClient) VerifyToken(ctx context.Context, in *VerifyTokenRequ
 // 用户服务定义
 type UserServiceServer interface {
 	// 模拟登录获取凭证
-	Login(context.Context, *LoginRequest) (*LoginReply, error)
+	Login(context.Context, *LoginRequest) (*LoginData, error)
 	// 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
-	Register(context.Context, *RegisterRequest) (*RegisterReply, error)
+	Register(context.Context, *RegisterRequest) (*RegisterData, error)
 	// 验证 Token 并返回用户信息
-	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenReply, error)
+	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenData, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -98,13 +98,13 @@ type UserServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedUserServiceServer struct{}
 
-func (UnimplementedUserServiceServer) Login(context.Context, *LoginRequest) (*LoginReply, error) {
+func (UnimplementedUserServiceServer) Login(context.Context, *LoginRequest) (*LoginData, error) {
 	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
 }
-func (UnimplementedUserServiceServer) Register(context.Context, *RegisterRequest) (*RegisterReply, error) {
+func (UnimplementedUserServiceServer) Register(context.Context, *RegisterRequest) (*RegisterData, error) {
 	return nil, status.Error(codes.Unimplemented, "method Register not implemented")
 }
-func (UnimplementedUserServiceServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenReply, error) {
+func (UnimplementedUserServiceServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenData, error) {
 	return nil, status.Error(codes.Unimplemented, "method VerifyToken not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}

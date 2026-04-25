@@ -7,11 +7,11 @@ option go_package = "github.com/CBookShu/kd48/api/proto/user/v1;userv1";
 // 用户服务定义
 service UserService {
   // 模拟登录获取凭证
-  rpc Login (LoginRequest) returns (LoginReply) {}
+  rpc Login (LoginRequest) returns (LoginData);
   // 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
-  rpc Register (RegisterRequest) returns (RegisterReply) {}
+  rpc Register (RegisterRequest) returns (RegisterData);
   // 验证 Token 并返回用户信息
-  rpc VerifyToken (VerifyTokenRequest) returns (VerifyTokenReply) {}
+  rpc VerifyToken (VerifyTokenRequest) returns (VerifyTokenData);
 }
 
 message LoginRequest {
@@ -19,10 +19,9 @@ message LoginRequest {
   string password = 2;
 }
 
-message LoginReply {
-  bool success = 1;
-  string token = 2; // 模拟返回的 token
-  uint64 user_id = 3; // 新增：用户ID，网关需要用于顶号映射
+message LoginData {
+  string token = 1;
+  uint64 user_id = 2;
 }
 
 message RegisterRequest {
@@ -30,22 +29,16 @@ message RegisterRequest {
   string password = 2;
 }
 
-message RegisterReply {
-  bool success = 1;
-  string token = 2;
-  uint64 user_id = 3; // 新增：用户ID
+message RegisterData {
+  string token = 1;
+  uint64 user_id = 2;
 }
 
 message VerifyTokenRequest {
-  string token = 1; // Token to validate (from client localStorage)
+  string token = 1;
 }
 
 message VerifyTokenData {
   uint64 user_id = 1;
   string username = 2;
-}
-
-message VerifyTokenReply {
-  bool success = 1;
-  VerifyTokenData data = 2;
 }
