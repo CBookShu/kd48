@@ -169,6 +169,11 @@ class WsClient {
     return this.callWithToken('/lobby.v1.ItemService/GetMyItems');
   }
 
+  // 验证 token 是否有效
+  verifyToken() {
+    return this.callWithToken('/user.v1.UserService/VerifyToken');
+  }
+
   // === Token 管理 ===
 
   saveToken(token) {
