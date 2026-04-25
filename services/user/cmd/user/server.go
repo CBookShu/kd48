@@ -242,7 +242,7 @@ func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRe
 		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
 	}
 
-	routingKey := "sys:user:id" + fmt.Sprintf("%d", userID)
+	routingKey := "sys:user:id:" + fmt.Sprintf("%d", userID)
 
 	queries, err := s.getQueries(ctx, routingKey)
 	if err != nil {
