@@ -129,21 +129,21 @@ enum ErrorCode {
 ```go
 package commonv1
 
-var ErrorMessages = map[int32]string{
-    0:    "成功",
-    1:    "请求参数错误",
-    2:    "内部错误",
-    3:    "服务不可用",
-    100:  "用户不存在",
-    101:  "未认证",
-    200:  "今日已签到",
-    201:  "签到期未开启",
-    202:  "签到期已过期",
-    300:  "物品不存在",
-    301:  "物品不足",
+var ErrorMessages = map[ErrorCode]string{
+    ErrorCode_SUCCESS:                 "成功",
+    ErrorCode_INVALID_REQUEST:         "请求参数错误",
+    ErrorCode_INTERNAL_ERROR:          "内部错误",
+    ErrorCode_SERVICE_UNAVAILABLE:     "服务不可用",
+    ErrorCode_USER_NOT_FOUND:          "用户不存在",
+    ErrorCode_USER_NOT_AUTHENTICATED:  "未认证",
+    ErrorCode_CHECKIN_ALREADY_TODAY:   "今日已签到",
+    ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE:  "签到期未开启",
+    ErrorCode_CHECKIN_PERIOD_EXPIRED:  "签到期已过期",
+    ErrorCode_ITEM_NOT_FOUND:          "物品不存在",
+    ErrorCode_ITEM_INSUFFICIENT:       "物品不足",
 }
 
-func ErrorMessage(code int32) string {
+func ErrorMessage(code ErrorCode) string {
     if msg, ok := ErrorMessages[code]; ok {
         return msg
     }
@@ -175,6 +175,8 @@ func ErrorMessage(code int32) string {
 ```go
 import (
     commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
 )
 
 // 将 gRPC 错误转为 ApiResponse
@@ -184,35 +186,36 @@ func toApiResponse(err error) *commonv1.ApiResponse {
     }
     st, ok := status.FromError(err)
     if !ok {
+        code := commonv1.ErrorCode_INTERNAL_ERROR
         return &commonv1.ApiResponse{
-            Code:    commonv1.ErrorCode_INTERNAL_ERROR,
-            Message: err.Error(),
+            Code:    int32(code),
+            Message: commonv1.ErrorMessage(code),
         }
     }
     code := errorCodeFromGRPC(st.Code())
     return &commonv1.ApiResponse{
-        Code:    code,
+        Code:    int32(code),
         Message: commonv1.ErrorMessage(code),
     }
 }
 
 // gRPC Code -> ErrorCode 映射
-func errorCodeFromGRPC(code codes.Code) int32 {
+func errorCodeFromGRPC(code codes.Code) commonv1.ErrorCode {
     switch code {
     case codes.OK:
-        return 0
+        return commonv1.ErrorCode_SUCCESS
     case codes.InvalidArgument:
-        return 1
+        return commonv1.ErrorCode_INVALID_REQUEST
     case codes.Internal:
-        return 2
+        return commonv1.ErrorCode_INTERNAL_ERROR
     case codes.Unavailable:
-        return 3
+        return commonv1.ErrorCode_SERVICE_UNAVAILABLE
     case codes.Unauthenticated:
-        return 101
+        return commonv1.ErrorCode_USER_NOT_AUTHENTICATED
     case codes.NotFound:
-        return 100
+        return commonv1.ErrorCode_USER_NOT_FOUND
     default:
-        return 2
+        return commonv1.ErrorCode_INTERNAL_ERROR
     }
 }
 ```
@@ -234,18 +237,94 @@ func errorCodeFromGRPC(code codes.Code) int32 {
 
 ## 客户端处理
 
-**客户端行为：**
-- 通过同步 proto 获取 ErrorCode 枚举（知道有哪些错误）
-- 收到响应后，直接使用 `resp.Message` 显示给用户
-- `resp.Code` 可用于业务逻辑判断（如跳转、弹窗等）
-- **不需要** errors.go，不需要查表
+### 1. 消息解析流程
 
-**客户端示例：**
+**CLI 客户端示例：**
 ```go
-if resp.Code != 0 {
-    return resp.Message  // 直接用服务端返回的 message
+// gateway.go - 解析响应
+type WsResponse struct {
+    Method string      `json:"method"`
+    Code   int32       `json:"code"`
+    Msg    string      `json:"msg"`      // 错误描述（服务端填充）
+    Data   interface{} `json:"data"`     // 业务数据
+}
+
+// handler.go - 使用响应
+func (h *Handler) handleResponse(resp *client.WsResponse) string {
+    if resp.Code != 0 {
+        // 失败：直接用 Msg 显示给用户
+        return fmt.Sprintf("[错误] %s", resp.Msg)
+    }
+    // 成功：处理 Data
+    return "操作成功"
 }
 ```
+
+### 2. Code vs Message 用途
+
+| 字段 | 用途 |
+|------|------|
+| `Code` | 业务逻辑判断（如：code==101 跳转登录页） |
+| `Msg` | 直接显示给用户（服务端已填充好） |
+
+### 3. 客户端不需要的错误处理代码
+
+- ❌ 不需要 `errors.go`
+- ❌ 不需要 `ErrorMessages` 映射表
+- ❌ 不需要查表翻译 message
+
+---
+
+## 服务间 RPC 调用
+
+### 调用关系
+
+```
+Gateway (ws) → User Service (gRPC)
+             → Lobby Service (gRPC)
+             
+Lobby Service → User Service (gRPC)  // 服务间调用
+```
+
+### 服务间调用使用 gRPC 原生错误
+
+**调用方（Client）：**
+```go
+// 使用 gRPC 标准客户端
+resp, err := userClient.GetUser(ctx, &userv1.GetUserRequest{UserId: id})
+if err != nil {
+    // 直接处理 gRPC 错误，不需要包装
+    st, _ := status.FromError(err)
+    switch st.Code() {
+    case codes.NotFound:
+        return nil, status.Errorf(codes.InvalidArgument, "user not found")
+    default:
+        return nil, err  // 透传
+    }
+}
+```
+
+**被调用方（Server）：**
+```go
+// 直接返回 gRPC 原生错误
+func (s *UserService) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.User, error) {
+    user, err := s.store.GetUser(ctx, req.UserId)
+    if err != nil {
+        if errors.Is(err, redis.Nil) {
+            return nil, status.Errorf(codes.NotFound, "user not found")
+        }
+        return nil, status.Errorf(codes.Internal, "internal error")
+    }
+    return user, nil
+}
+```
+
+### 服务间错误传播
+
+**原则：** 错误在服务间直接透传，不做额外包装。
+
+- Gateway → Service：Gateway 负责转换为 ApiResponse
+- Service → Service：直接用 gRPC status 传递
 
 ---
 
