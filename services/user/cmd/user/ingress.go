@@ -14,6 +14,7 @@ import (
 type userLoginRegister interface {
 	Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error)
 	Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterReply, error)
+	VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenReply, error)
 }
 
 type ingressServer struct {
@@ -54,6 +55,21 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 			return nil, status.Errorf(codes.InvalidArgument, "invalid json: %v", err)
 		}
 		out, err := s.inner.Register(ctx, &in)
+		if err != nil {
+			return nil, err
+		}
+		b, err := protojson.Marshal(out)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
+		}
+		return &gatewayv1.IngressReply{JsonPayload: b}, nil
+
+	case "/user.v1.UserService/VerifyToken":
+		if s.inner == nil {
+			return nil, status.Error(codes.Internal, "ingress inner not configured")
+		}
+		// No payload unmarshalling needed - user_id comes from context
+		out, err := s.inner.VerifyToken(ctx, &userv1.VerifyTokenRequest{})
 		if err != nil {
 			return nil, err
 		}

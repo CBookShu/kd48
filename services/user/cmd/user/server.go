@@ -225,3 +225,47 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 		UserId:  user.ID,
 	}, nil
 }
+
+func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenReply, error) {
+	slog.InfoContext(ctx, "Received VerifyToken request")
+
+	// Get user_id from context (injected by gateway)
+	userIDVal := ctx.Value("user_id")
+	if userIDVal == nil {
+		slog.ErrorContext(ctx, "No user_id in context")
+		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
+	}
+
+	userID, ok := userIDVal.(int64)
+	if !ok {
+		slog.ErrorContext(ctx, "Invalid user_id type in context")
+		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
+	}
+
+	routingKey := "sys:user:id" + fmt.Sprintf("%d", userID)
+
+	queries, err := s.getQueries(ctx, routingKey)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := queries.GetUserByID(ctx, uint64(userID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			slog.ErrorContext(ctx, "User not found", "user_id", userID)
+			return nil, status.Error(codes.Unauthenticated, "user not found")
+		}
+		slog.ErrorContext(ctx, "GetUserByID failed", "error", err)
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+
+	slog.InfoContext(ctx, "Token verified successfully", "user_id", userID, "username", user.Username)
+
+	return &userv1.VerifyTokenReply{
+		Success: true,
+		Data: &userv1.VerifyTokenData{
+			UserId:   user.ID,
+			Username: user.Username,
+		},
+	}, nil
+}

@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_Login_FullMethodName    = "/user.v1.UserService/Login"
-	UserService_Register_FullMethodName = "/user.v1.UserService/Register"
+	UserService_Login_FullMethodName       = "/user.v1.UserService/Login"
+	UserService_Register_FullMethodName    = "/user.v1.UserService/Register"
+	UserService_VerifyToken_FullMethodName = "/user.v1.UserService/VerifyToken"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -33,6 +34,8 @@ type UserServiceClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
 	// 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterReply, error)
+	// 验证 Token 并返回用户信息
+	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenReply, error)
 }
 
 type userServiceClient struct {
@@ -63,6 +66,16 @@ func (c *userServiceClient) Register(ctx context.Context, in *RegisterRequest, o
 	return out, nil
 }
 
+func (c *userServiceClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyTokenReply)
+	err := c.cc.Invoke(ctx, UserService_VerifyToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -73,6 +86,8 @@ type UserServiceServer interface {
 	Login(context.Context, *LoginRequest) (*LoginReply, error)
 	// 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
 	Register(context.Context, *RegisterRequest) (*RegisterReply, error)
+	// 验证 Token 并返回用户信息
+	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenReply, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -88,6 +103,9 @@ func (UnimplementedUserServiceServer) Login(context.Context, *LoginRequest) (*Lo
 }
 func (UnimplementedUserServiceServer) Register(context.Context, *RegisterRequest) (*RegisterReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedUserServiceServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyToken not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -146,6 +164,24 @@ func _UserService_Register_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_VerifyToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).VerifyToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_VerifyToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).VerifyToken(ctx, req.(*VerifyTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -160,6 +196,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Register",
 			Handler:    _UserService_Register_Handler,
+		},
+		{
+			MethodName: "VerifyToken",
+			Handler:    _UserService_VerifyToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -10,6 +10,8 @@ service UserService {
   rpc Login (LoginRequest) returns (LoginReply) {}
   // 注册并签发会话（注册即登录，与 Login 同等 Redis Session）
   rpc Register (RegisterRequest) returns (RegisterReply) {}
+  // 验证 Token 并返回用户信息
+  rpc VerifyToken (VerifyTokenRequest) returns (VerifyTokenReply) {}
 }
 
 message LoginRequest {
@@ -32,4 +34,18 @@ message RegisterReply {
   bool success = 1;
   string token = 2;
   uint64 user_id = 3; // 新增：用户ID
+}
+
+message VerifyTokenRequest {
+  // Empty - token is validated by gateway, user_id comes from context
+}
+
+message VerifyTokenData {
+  uint64 user_id = 1;
+  string username = 2;
+}
+
+message VerifyTokenReply {
+  bool success = 1;
+  VerifyTokenData data = 2;
 }
