@@ -19,6 +19,8 @@ const (
 	ReadTimeout = 30 * time.Second
 	// PongWait Pong 等待时间
 	PongWait = 60 * time.Second
+	// PingInterval 心跳间隔（必须小于 PongWait）
+	PingInterval = 30 * time.Second
 )
 
 // WsRequest WebSocket 请求
@@ -37,13 +39,20 @@ type WsResponse struct {
 
 // Gateway WebSocket 客户端
 type Gateway struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
+	conn    *websocket.Conn
+	mu      sync.Mutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 // New 创建 Gateway 客户端
 func New() *Gateway {
-	return &Gateway{}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Gateway{
+		ctx:    ctx,
+		cancel: cancel,
+	}
 }
 
 // Connect 连接到 Gateway
@@ -58,6 +67,10 @@ func (g *Gateway) Connect(ctx context.Context) error {
 	conn.EnableWriteCompression(true)
 
 	g.conn = conn
+
+	// 启动心跳 goroutine
+	g.startHeartbeat()
+
 	return nil
 }
 
@@ -105,10 +118,42 @@ func (g *Gateway) Send(ctx context.Context, method string, payload interface{}) 
 
 // Close 关闭连接
 func (g *Gateway) Close() error {
+	// 停止心跳
+	g.cancel()
+	g.wg.Wait()
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.conn != nil {
 		return g.conn.Close()
 	}
 	return nil
+}
+
+// startHeartbeat 启动心跳 goroutine
+func (g *Gateway) startHeartbeat() {
+	g.wg.Add(1)
+	go func() {
+		defer g.wg.Done()
+		ticker := time.NewTicker(PingInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-g.ctx.Done():
+				return
+			case <-ticker.C:
+				g.mu.Lock()
+				if g.conn != nil {
+					g.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+					if err := g.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+						// 写失败可能是连接已关闭，静默退出
+						g.mu.Unlock()
+						return
+					}
+				}
+				g.mu.Unlock()
+			}
+		}
+	}()
 }
