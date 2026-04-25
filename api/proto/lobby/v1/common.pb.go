@@ -9,9 +9,7 @@ package lobbyv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 )
 
@@ -22,207 +20,19 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ErrorCode 错误码定义
-type ErrorCode int32
-
-const (
-	ErrorCode_SUCCESS ErrorCode = 0
-	// 通用错误 1-99
-	ErrorCode_INVALID_REQUEST     ErrorCode = 1
-	ErrorCode_INTERNAL_ERROR      ErrorCode = 2
-	ErrorCode_SERVICE_UNAVAILABLE ErrorCode = 3
-	// 用户相关 100-199
-	ErrorCode_USER_NOT_FOUND         ErrorCode = 100
-	ErrorCode_USER_NOT_AUTHENTICATED ErrorCode = 101
-	// 签到相关 200-299
-	ErrorCode_CHECKIN_ALREADY_TODAY     ErrorCode = 200
-	ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE ErrorCode = 201
-	ErrorCode_CHECKIN_PERIOD_EXPIRED    ErrorCode = 202
-	// 物品相关 300-399
-	ErrorCode_ITEM_NOT_FOUND    ErrorCode = 300
-	ErrorCode_ITEM_INSUFFICIENT ErrorCode = 301
-)
-
-// Enum value maps for ErrorCode.
-var (
-	ErrorCode_name = map[int32]string{
-		0:   "SUCCESS",
-		1:   "INVALID_REQUEST",
-		2:   "INTERNAL_ERROR",
-		3:   "SERVICE_UNAVAILABLE",
-		100: "USER_NOT_FOUND",
-		101: "USER_NOT_AUTHENTICATED",
-		200: "CHECKIN_ALREADY_TODAY",
-		201: "CHECKIN_PERIOD_NOT_ACTIVE",
-		202: "CHECKIN_PERIOD_EXPIRED",
-		300: "ITEM_NOT_FOUND",
-		301: "ITEM_INSUFFICIENT",
-	}
-	ErrorCode_value = map[string]int32{
-		"SUCCESS":                   0,
-		"INVALID_REQUEST":           1,
-		"INTERNAL_ERROR":            2,
-		"SERVICE_UNAVAILABLE":       3,
-		"USER_NOT_FOUND":            100,
-		"USER_NOT_AUTHENTICATED":    101,
-		"CHECKIN_ALREADY_TODAY":     200,
-		"CHECKIN_PERIOD_NOT_ACTIVE": 201,
-		"CHECKIN_PERIOD_EXPIRED":    202,
-		"ITEM_NOT_FOUND":            300,
-		"ITEM_INSUFFICIENT":         301,
-	}
-)
-
-func (x ErrorCode) Enum() *ErrorCode {
-	p := new(ErrorCode)
-	*p = x
-	return p
-}
-
-func (x ErrorCode) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ErrorCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_lobby_v1_common_proto_enumTypes[0].Descriptor()
-}
-
-func (ErrorCode) Type() protoreflect.EnumType {
-	return &file_lobby_v1_common_proto_enumTypes[0]
-}
-
-func (x ErrorCode) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ErrorCode.Descriptor instead.
-func (ErrorCode) EnumDescriptor() ([]byte, []int) {
-	return file_lobby_v1_common_proto_rawDescGZIP(), []int{0}
-}
-
-// ApiResponse 通用响应外壳
-type ApiResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Data          *anypb.Any             `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	Meta          map[string]string      `protobuf:"bytes,4,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ApiResponse) Reset() {
-	*x = ApiResponse{}
-	mi := &file_lobby_v1_common_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ApiResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ApiResponse) ProtoMessage() {}
-
-func (x *ApiResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lobby_v1_common_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ApiResponse.ProtoReflect.Descriptor instead.
-func (*ApiResponse) Descriptor() ([]byte, []int) {
-	return file_lobby_v1_common_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ApiResponse) GetCode() int32 {
-	if x != nil {
-		return x.Code
-	}
-	return 0
-}
-
-func (x *ApiResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ApiResponse) GetData() *anypb.Any {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-func (x *ApiResponse) GetMeta() map[string]string {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
 var File_lobby_v1_common_proto protoreflect.FileDescriptor
 
 const file_lobby_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x15lobby/v1/common.proto\x12\blobby.v1\x1a\x19google/protobuf/any.proto\"\xd3\x01\n" +
-	"\vApiResponse\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12(\n" +
-	"\x04data\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\x04data\x123\n" +
-	"\x04meta\x18\x04 \x03(\v2\x1f.lobby.v1.ApiResponse.MetaEntryR\x04meta\x1a7\n" +
-	"\tMetaEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x90\x02\n" +
-	"\tErrorCode\x12\v\n" +
-	"\aSUCCESS\x10\x00\x12\x13\n" +
-	"\x0fINVALID_REQUEST\x10\x01\x12\x12\n" +
-	"\x0eINTERNAL_ERROR\x10\x02\x12\x17\n" +
-	"\x13SERVICE_UNAVAILABLE\x10\x03\x12\x12\n" +
-	"\x0eUSER_NOT_FOUND\x10d\x12\x1a\n" +
-	"\x16USER_NOT_AUTHENTICATED\x10e\x12\x1a\n" +
-	"\x15CHECKIN_ALREADY_TODAY\x10\xc8\x01\x12\x1e\n" +
-	"\x19CHECKIN_PERIOD_NOT_ACTIVE\x10\xc9\x01\x12\x1b\n" +
-	"\x16CHECKIN_PERIOD_EXPIRED\x10\xca\x01\x12\x13\n" +
-	"\x0eITEM_NOT_FOUND\x10\xac\x02\x12\x16\n" +
-	"\x11ITEM_INSUFFICIENT\x10\xad\x02B5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
+	"\x15lobby/v1/common.proto\x12\blobby.v1B5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
 
-var (
-	file_lobby_v1_common_proto_rawDescOnce sync.Once
-	file_lobby_v1_common_proto_rawDescData []byte
-)
-
-func file_lobby_v1_common_proto_rawDescGZIP() []byte {
-	file_lobby_v1_common_proto_rawDescOnce.Do(func() {
-		file_lobby_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_lobby_v1_common_proto_rawDesc), len(file_lobby_v1_common_proto_rawDesc)))
-	})
-	return file_lobby_v1_common_proto_rawDescData
-}
-
-var file_lobby_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_lobby_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_lobby_v1_common_proto_goTypes = []any{
-	(ErrorCode)(0),      // 0: lobby.v1.ErrorCode
-	(*ApiResponse)(nil), // 1: lobby.v1.ApiResponse
-	nil,                 // 2: lobby.v1.ApiResponse.MetaEntry
-	(*anypb.Any)(nil),   // 3: google.protobuf.Any
-}
+var file_lobby_v1_common_proto_goTypes = []any{}
 var file_lobby_v1_common_proto_depIdxs = []int32{
-	3, // 0: lobby.v1.ApiResponse.data:type_name -> google.protobuf.Any
-	2, // 1: lobby.v1.ApiResponse.meta:type_name -> lobby.v1.ApiResponse.MetaEntry
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_lobby_v1_common_proto_init() }
@@ -235,15 +45,13 @@ func file_lobby_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lobby_v1_common_proto_rawDesc), len(file_lobby_v1_common_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   2,
+			NumEnums:      0,
+			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_lobby_v1_common_proto_goTypes,
 		DependencyIndexes: file_lobby_v1_common_proto_depIdxs,
-		EnumInfos:         file_lobby_v1_common_proto_enumTypes,
-		MessageInfos:      file_lobby_v1_common_proto_msgTypes,
 	}.Build()
 	File_lobby_v1_common_proto = out.File
 	file_lobby_v1_common_proto_goTypes = nil

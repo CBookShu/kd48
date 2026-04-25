@@ -60,7 +60,7 @@ func (*CheckinRequest) Descriptor() ([]byte, []int) {
 type CheckinData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ContinuousDays int32                  `protobuf:"varint,1,opt,name=continuous_days,json=continuousDays,proto3" json:"continuous_days,omitempty"`
-	Rewards        map[int32]int64        `protobuf:"bytes,2,rep,name=rewards,proto3" json:"rewards,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // 本次获得的奖励
+	Rewards        map[int32]int64        `protobuf:"bytes,2,rep,name=rewards,proto3" json:"rewards,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -146,17 +146,15 @@ func (*GetStatusRequest) Descriptor() ([]byte, []int) {
 }
 
 type CheckinStatusData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 当前期配置
+	state             protoimpl.MessageState  `protogen:"open.v1"`
 	PeriodId          int64                   `protobuf:"varint,1,opt,name=period_id,json=periodId,proto3" json:"period_id,omitempty"`
 	PeriodName        string                  `protobuf:"bytes,2,opt,name=period_name,json=periodName,proto3" json:"period_name,omitempty"`
 	DailyRewards      []*DailyRewardInfo      `protobuf:"bytes,3,rep,name=daily_rewards,json=dailyRewards,proto3" json:"daily_rewards,omitempty"`
 	ContinuousRewards []*ContinuousRewardInfo `protobuf:"bytes,4,rep,name=continuous_rewards,json=continuousRewards,proto3" json:"continuous_rewards,omitempty"`
-	// 玩家状态
-	TodayChecked      bool    `protobuf:"varint,10,opt,name=today_checked,json=todayChecked,proto3" json:"today_checked,omitempty"`
-	ContinuousDays    int32   `protobuf:"varint,11,opt,name=continuous_days,json=continuousDays,proto3" json:"continuous_days,omitempty"`
-	TotalDays         int32   `protobuf:"varint,12,opt,name=total_days,json=totalDays,proto3" json:"total_days,omitempty"`
-	ClaimedContinuous []int32 `protobuf:"varint,13,rep,packed,name=claimed_continuous,json=claimedContinuous,proto3" json:"claimed_continuous,omitempty"` // 已领取的连续奖励天数
+	TodayChecked      bool                    `protobuf:"varint,10,opt,name=today_checked,json=todayChecked,proto3" json:"today_checked,omitempty"`
+	ContinuousDays    int32                   `protobuf:"varint,11,opt,name=continuous_days,json=continuousDays,proto3" json:"continuous_days,omitempty"`
+	TotalDays         int32                   `protobuf:"varint,12,opt,name=total_days,json=totalDays,proto3" json:"total_days,omitempty"`
+	ClaimedContinuous []int32                 `protobuf:"varint,13,rep,packed,name=claimed_continuous,json=claimedContinuous,proto3" json:"claimed_continuous,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -355,7 +353,7 @@ var File_lobby_v1_checkin_proto protoreflect.FileDescriptor
 
 const file_lobby_v1_checkin_proto_rawDesc = "" +
 	"\n" +
-	"\x16lobby/v1/checkin.proto\x12\blobby.v1\x1a\x15lobby/v1/common.proto\"\x10\n" +
+	"\x16lobby/v1/checkin.proto\x12\blobby.v1\"\x10\n" +
 	"\x0eCheckinRequest\"\xb0\x01\n" +
 	"\vCheckinData\x12'\n" +
 	"\x0fcontinuous_days\x18\x01 \x01(\x05R\x0econtinuousDays\x12<\n" +
@@ -387,10 +385,10 @@ const file_lobby_v1_checkin_proto_rawDesc = "" +
 	"\arewards\x18\x02 \x03(\v2+.lobby.v1.ContinuousRewardInfo.RewardsEntryR\arewards\x1a:\n" +
 	"\fRewardsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\x8c\x01\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\x92\x01\n" +
 	"\x0eCheckinService\x12:\n" +
-	"\aCheckin\x12\x18.lobby.v1.CheckinRequest\x1a\x15.lobby.v1.ApiResponse\x12>\n" +
-	"\tGetStatus\x12\x1a.lobby.v1.GetStatusRequest\x1a\x15.lobby.v1.ApiResponseB5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
+	"\aCheckin\x12\x18.lobby.v1.CheckinRequest\x1a\x15.lobby.v1.CheckinData\x12D\n" +
+	"\tGetStatus\x12\x1a.lobby.v1.GetStatusRequest\x1a\x1b.lobby.v1.CheckinStatusDataB5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
 
 var (
 	file_lobby_v1_checkin_proto_rawDescOnce sync.Once
@@ -415,7 +413,6 @@ var file_lobby_v1_checkin_proto_goTypes = []any{
 	nil,                          // 6: lobby.v1.CheckinData.RewardsEntry
 	nil,                          // 7: lobby.v1.DailyRewardInfo.RewardsEntry
 	nil,                          // 8: lobby.v1.ContinuousRewardInfo.RewardsEntry
-	(*ApiResponse)(nil),          // 9: lobby.v1.ApiResponse
 }
 var file_lobby_v1_checkin_proto_depIdxs = []int32{
 	6, // 0: lobby.v1.CheckinData.rewards:type_name -> lobby.v1.CheckinData.RewardsEntry
@@ -425,8 +422,8 @@ var file_lobby_v1_checkin_proto_depIdxs = []int32{
 	8, // 4: lobby.v1.ContinuousRewardInfo.rewards:type_name -> lobby.v1.ContinuousRewardInfo.RewardsEntry
 	0, // 5: lobby.v1.CheckinService.Checkin:input_type -> lobby.v1.CheckinRequest
 	2, // 6: lobby.v1.CheckinService.GetStatus:input_type -> lobby.v1.GetStatusRequest
-	9, // 7: lobby.v1.CheckinService.Checkin:output_type -> lobby.v1.ApiResponse
-	9, // 8: lobby.v1.CheckinService.GetStatus:output_type -> lobby.v1.ApiResponse
+	1, // 7: lobby.v1.CheckinService.Checkin:output_type -> lobby.v1.CheckinData
+	3, // 8: lobby.v1.CheckinService.GetStatus:output_type -> lobby.v1.CheckinStatusData
 	7, // [7:9] is the sub-list for method output_type
 	5, // [5:7] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -439,7 +436,6 @@ func file_lobby_v1_checkin_proto_init() {
 	if File_lobby_v1_checkin_proto != nil {
 		return
 	}
-	file_lobby_v1_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

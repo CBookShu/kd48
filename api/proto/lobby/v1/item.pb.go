@@ -105,7 +105,7 @@ var File_lobby_v1_item_proto protoreflect.FileDescriptor
 
 const file_lobby_v1_item_proto_rawDesc = "" +
 	"\n" +
-	"\x13lobby/v1/item.proto\x12\blobby.v1\x1a\x15lobby/v1/common.proto\"\x13\n" +
+	"\x13lobby/v1/item.proto\x12\blobby.v1\"\x13\n" +
 	"\x11GetMyItemsRequest\"\x7f\n" +
 	"\vMyItemsData\x126\n" +
 	"\x05items\x18\x01 \x03(\v2 .lobby.v1.MyItemsData.ItemsEntryR\x05items\x1a8\n" +
@@ -115,7 +115,7 @@ const file_lobby_v1_item_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012O\n" +
 	"\vItemService\x12@\n" +
 	"\n" +
-	"GetMyItems\x12\x1b.lobby.v1.GetMyItemsRequest\x1a\x15.lobby.v1.ApiResponseB5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
+	"GetMyItems\x12\x1b.lobby.v1.GetMyItemsRequest\x1a\x15.lobby.v1.MyItemsDataB5Z3github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1b\x06proto3"
 
 var (
 	file_lobby_v1_item_proto_rawDescOnce sync.Once
@@ -134,12 +134,11 @@ var file_lobby_v1_item_proto_goTypes = []any{
 	(*GetMyItemsRequest)(nil), // 0: lobby.v1.GetMyItemsRequest
 	(*MyItemsData)(nil),       // 1: lobby.v1.MyItemsData
 	nil,                       // 2: lobby.v1.MyItemsData.ItemsEntry
-	(*ApiResponse)(nil),       // 3: lobby.v1.ApiResponse
 }
 var file_lobby_v1_item_proto_depIdxs = []int32{
 	2, // 0: lobby.v1.MyItemsData.items:type_name -> lobby.v1.MyItemsData.ItemsEntry
 	0, // 1: lobby.v1.ItemService.GetMyItems:input_type -> lobby.v1.GetMyItemsRequest
-	3, // 2: lobby.v1.ItemService.GetMyItems:output_type -> lobby.v1.ApiResponse
+	1, // 2: lobby.v1.ItemService.GetMyItems:output_type -> lobby.v1.MyItemsData
 	2, // [2:3] is the sub-list for method output_type
 	1, // [1:2] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -152,7 +151,6 @@ func file_lobby_v1_item_proto_init() {
 	if File_lobby_v1_item_proto != nil {
 		return
 	}
-	file_lobby_v1_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

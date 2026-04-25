@@ -4,35 +4,31 @@ package lobby.v1;
 
 option go_package = "github.com/CBookShu/kd48/api/proto/lobby/v1;lobbyv1";
 
-import "lobby/v1/common.proto";
-
 // CheckinService 签到服务
 service CheckinService {
-  rpc Checkin(CheckinRequest) returns (ApiResponse);
-  rpc GetStatus(GetStatusRequest) returns (ApiResponse);
+  rpc Checkin(CheckinRequest) returns (CheckinData);
+  rpc GetStatus(GetStatusRequest) returns (CheckinStatusData);
 }
 
 message CheckinRequest {}
 
 message CheckinData {
   int32 continuous_days = 1;
-  map<int32, int64> rewards = 2;  // 本次获得的奖励
+  map<int32, int64> rewards = 2;
 }
 
 message GetStatusRequest {}
 
 message CheckinStatusData {
-  // 当前期配置
   int64 period_id = 1;
   string period_name = 2;
   repeated DailyRewardInfo daily_rewards = 3;
   repeated ContinuousRewardInfo continuous_rewards = 4;
 
-  // 玩家状态
   bool today_checked = 10;
   int32 continuous_days = 11;
   int32 total_days = 12;
-  repeated int32 claimed_continuous = 13;  // 已领取的连续奖励天数
+  repeated int32 claimed_continuous = 13;
 }
 
 message DailyRewardInfo {

@@ -29,8 +29,8 @@ const (
 //
 // CheckinService 签到服务
 type CheckinServiceClient interface {
-	Checkin(ctx context.Context, in *CheckinRequest, opts ...grpc.CallOption) (*ApiResponse, error)
-	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*ApiResponse, error)
+	Checkin(ctx context.Context, in *CheckinRequest, opts ...grpc.CallOption) (*CheckinData, error)
+	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*CheckinStatusData, error)
 }
 
 type checkinServiceClient struct {
@@ -41,9 +41,9 @@ func NewCheckinServiceClient(cc grpc.ClientConnInterface) CheckinServiceClient {
 	return &checkinServiceClient{cc}
 }
 
-func (c *checkinServiceClient) Checkin(ctx context.Context, in *CheckinRequest, opts ...grpc.CallOption) (*ApiResponse, error) {
+func (c *checkinServiceClient) Checkin(ctx context.Context, in *CheckinRequest, opts ...grpc.CallOption) (*CheckinData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApiResponse)
+	out := new(CheckinData)
 	err := c.cc.Invoke(ctx, CheckinService_Checkin_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -51,9 +51,9 @@ func (c *checkinServiceClient) Checkin(ctx context.Context, in *CheckinRequest, 
 	return out, nil
 }
 
-func (c *checkinServiceClient) GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*ApiResponse, error) {
+func (c *checkinServiceClient) GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*CheckinStatusData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApiResponse)
+	out := new(CheckinStatusData)
 	err := c.cc.Invoke(ctx, CheckinService_GetStatus_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -67,8 +67,8 @@ func (c *checkinServiceClient) GetStatus(ctx context.Context, in *GetStatusReque
 //
 // CheckinService 签到服务
 type CheckinServiceServer interface {
-	Checkin(context.Context, *CheckinRequest) (*ApiResponse, error)
-	GetStatus(context.Context, *GetStatusRequest) (*ApiResponse, error)
+	Checkin(context.Context, *CheckinRequest) (*CheckinData, error)
+	GetStatus(context.Context, *GetStatusRequest) (*CheckinStatusData, error)
 	mustEmbedUnimplementedCheckinServiceServer()
 }
 
@@ -79,10 +79,10 @@ type CheckinServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCheckinServiceServer struct{}
 
-func (UnimplementedCheckinServiceServer) Checkin(context.Context, *CheckinRequest) (*ApiResponse, error) {
+func (UnimplementedCheckinServiceServer) Checkin(context.Context, *CheckinRequest) (*CheckinData, error) {
 	return nil, status.Error(codes.Unimplemented, "method Checkin not implemented")
 }
-func (UnimplementedCheckinServiceServer) GetStatus(context.Context, *GetStatusRequest) (*ApiResponse, error) {
+func (UnimplementedCheckinServiceServer) GetStatus(context.Context, *GetStatusRequest) (*CheckinStatusData, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStatus not implemented")
 }
 func (UnimplementedCheckinServiceServer) mustEmbedUnimplementedCheckinServiceServer() {}

@@ -28,7 +28,7 @@ const (
 //
 // ItemService 物品服务
 type ItemServiceClient interface {
-	GetMyItems(ctx context.Context, in *GetMyItemsRequest, opts ...grpc.CallOption) (*ApiResponse, error)
+	GetMyItems(ctx context.Context, in *GetMyItemsRequest, opts ...grpc.CallOption) (*MyItemsData, error)
 }
 
 type itemServiceClient struct {
@@ -39,9 +39,9 @@ func NewItemServiceClient(cc grpc.ClientConnInterface) ItemServiceClient {
 	return &itemServiceClient{cc}
 }
 
-func (c *itemServiceClient) GetMyItems(ctx context.Context, in *GetMyItemsRequest, opts ...grpc.CallOption) (*ApiResponse, error) {
+func (c *itemServiceClient) GetMyItems(ctx context.Context, in *GetMyItemsRequest, opts ...grpc.CallOption) (*MyItemsData, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApiResponse)
+	out := new(MyItemsData)
 	err := c.cc.Invoke(ctx, ItemService_GetMyItems_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (c *itemServiceClient) GetMyItems(ctx context.Context, in *GetMyItemsReques
 //
 // ItemService 物品服务
 type ItemServiceServer interface {
-	GetMyItems(context.Context, *GetMyItemsRequest) (*ApiResponse, error)
+	GetMyItems(context.Context, *GetMyItemsRequest) (*MyItemsData, error)
 	mustEmbedUnimplementedItemServiceServer()
 }
 
@@ -66,7 +66,7 @@ type ItemServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedItemServiceServer struct{}
 
-func (UnimplementedItemServiceServer) GetMyItems(context.Context, *GetMyItemsRequest) (*ApiResponse, error) {
+func (UnimplementedItemServiceServer) GetMyItems(context.Context, *GetMyItemsRequest) (*MyItemsData, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMyItems not implemented")
 }
 func (UnimplementedItemServiceServer) mustEmbedUnimplementedItemServiceServer() {}
