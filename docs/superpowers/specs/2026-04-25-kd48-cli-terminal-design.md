@@ -73,7 +73,7 @@ internal/
 | `user:whoami` | - | ✗ | ✓ | 查看当前用户 |
 | `checkin:do` | - | ✗ | ✓ | 每日签到 |
 | `checkin:status` | - | ✗ | ✓ | 查看签到状态（详细）|
-| `items` | - | ✗ | ✓ | 查看背包物品 |
+| `item:list` | - | ✗ | ✓ | 查看背包物品 |
 | `help` | - | ✓ | ✓ | 显示帮助 |
 | `quit` / `exit` | - | ✓ | ✓ | 退出程序 |
 
@@ -121,7 +121,7 @@ kd48>
     user:whoami                         - Show current user
     checkin:do                          - Daily check-in
     checkin:status                      - View check-in status
-    items                               - View your items
+    item:list                           - View your items
     help                                - Show all commands
     quit / exit                         - Exit
 ══════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ kd48> checkin:do
 [成功] 签到成功！连续签到: 1 天
 获得奖励: {金币: 100}
 
-kd48> items
+kd48> item:list
 [发送请求...]
 [成功] 背包物品:
   - 1001: 100  (金币)
