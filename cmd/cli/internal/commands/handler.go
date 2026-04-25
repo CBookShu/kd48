@@ -32,16 +32,14 @@ func (i *int64String) UnmarshalJSON(data []byte) error {
 
 // userLoginResp 登录响应
 type userLoginResp struct {
-	Success bool       `json:"success"`
-	Token   string     `json:"token"`
-	UserID  int64String `json:"userId"`
+	Token  string      `json:"token"`
+	UserID int64String `json:"userId"`
 }
 
 // userRegisterResp 注册响应
 type userRegisterResp struct {
-	Success bool       `json:"success"`
-	Token   string     `json:"token"`
-	UserID  int64String `json:"userId"`
+	Token  string      `json:"token"`
+	UserID int64String `json:"userId"`
 }
 
 // checkinDoResp 签到响应（空结构，响应通过 Code 判断）
@@ -49,7 +47,6 @@ type checkinDoResp struct{}
 
 // checkinStatusResp 签到状态响应
 type checkinStatusResp struct {
-	Success        bool   `json:"success"`
 	PeriodID       int64  `json:"periodId"`
 	PeriodName     string `json:"periodName"`
 	TodayChecked   bool   `json:"todayChecked"`
@@ -196,10 +193,6 @@ func (h *Handler) userLogin(args []string) string {
 		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
 	}
 
-	if !loginResp.Success {
-		return "[错误] 用户名或密码错误"
-	}
-
 	// 更新状态
 	h.state.SetUser(username, int64(loginResp.UserID), loginResp.Token)
 
@@ -234,10 +227,6 @@ func (h *Handler) userRegister(args []string) string {
 	var regResp userRegisterResp
 	if err := json.Unmarshal(data, &regResp); err != nil {
 		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
-	}
-
-	if !regResp.Success {
-		return "[错误] 注册失败，用户名可能已存在"
 	}
 
 	// 更新状态
