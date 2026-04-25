@@ -363,9 +363,11 @@ func (h *Handler) items() string {
 		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
 	}
 
-	// 解析 items JSON
+	// 解析 items JSON (空字符串视为空 map)
 	var items map[int32]int64
-	if err := json.Unmarshal([]byte(itemsResp.Items), &items); err != nil {
+	if itemsResp.Items == "" {
+		items = make(map[int32]int64)
+	} else if err := json.Unmarshal([]byte(itemsResp.Items), &items); err != nil {
 		return fmt.Sprintf("[错误] 解析物品数据失败: %v", err)
 	}
 

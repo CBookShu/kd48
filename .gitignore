@@ -6,6 +6,7 @@ bin/
 logs/
 *.bin
 todo
+run.pid
 
 # 编译产物
 /user

@@ -20,3 +20,7 @@ go -C "$ROOT/services/lobby" build -o "$ROOT/lobby.bin" ./cmd/lobby
 echo "构建 seed-gateway-meta"
 # 构建 seed-gateway-meta（部署时写入 Etcd 元数据）
 go -C "$ROOT/gateway" build -o "$ROOT/seed-gateway-meta.bin" ./cmd/seed-gateway-meta
+
+echo "构建 CLI"
+# 构建 CLI
+go -C "$ROOT/cmd/cli" build -o "$ROOT/kd48-cli" .
