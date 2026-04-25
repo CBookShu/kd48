@@ -5,28 +5,238 @@
   <meta charset="UTF-8">
   <title>kd48 - 游戏平台</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .hidden { display: none !important; }
+    .view { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
 <body>
-  <nav class="nav">
-    <a href="/">首页</a>
-    <a href="/checkin.html">签到</a>
-    <a href="/items.html">背包</a>
-    <a href="#" onclick="logout()">退出</a>
-  </nav>
+  <div id="app">
+    <!-- Loading 视图 -->
+    <div id="view-loading" class="view">
+      <div class="container">
+        <div class="card">
+          <p>加载中...</p>
+        </div>
+      </div>
+    </div>
 
-  <div class="container">
-    <div class="card">
-      <h1>欢迎来到 kd48</h1>
-      <p>一个简单的游戏平台演示</p>
+    <!-- Guest 视图 (未登录) -->
+    <div id="view-guest" class="view hidden">
+      <div class="container">
+        <!-- 登录表单 -->
+        <div id="login-panel" class="card">
+          <h2>登录</h2>
+          <form id="loginForm">
+            <input type="text" id="username" placeholder="用户名" required>
+            <input type="password" id="password" placeholder="密码" required>
+            <button type="submit" class="btn">登录</button>
+          </form>
+          <p style="margin-top: 10px;">
+            没有账号？<a href="#" id="show-register">注册</a>
+          </p>
+          <p id="login-error" style="color: red;"></p>
+        </div>
+
+        <!-- 注册表单 -->
+        <div id="register-panel" class="card hidden">
+          <h2>注册</h2>
+          <form id="registerForm">
+            <input type="text" id="reg-username" placeholder="用户名" required>
+            <input type="password" id="reg-password" placeholder="密码" required>
+            <input type="password" id="reg-password2" placeholder="确认密码" required>
+            <button type="submit" class="btn">注册</button>
+          </form>
+          <p style="margin-top: 10px;">
+            已有账号？<a href="#" id="show-login">登录</a>
+          </p>
+          <p id="register-error" style="color: red;"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- LoggedIn 视图 (已登录) -->
+    <div id="view-loggedin" class="view hidden">
+      <nav class="nav">
+        <span id="welcome-user"></span>
+        <a href="/">首页</a>
+        <a href="/checkin.html">签到</a>
+        <a href="/items.html">背包</a>
+        <a href="#" id="logout-btn">退出</a>
+      </nav>
+
+      <div class="container">
+        <div class="card">
+          <h1>欢迎来到 kd48</h1>
+          <p>一个简单的游戏平台演示</p>
+          <div style="margin-top: 20px;">
+            <a href="/checkin.html" class="btn">签到</a>
+            <a href="/items.html" class="btn">背包</a>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="/js/api.js"></script>
   <script>
-    // 检查登录状态，未登录则跳转到登录页
-    if (!checkAuth()) {
-      // checkAuth 会自动跳转到登录页
+    // 视图常量
+    const VIEW = {
+      LOADING: 'loading',
+      GUEST: 'guest',
+      LOGGEDIN: 'loggedin'
+    };
+
+    let client = getWsClient();
+    let currentUser = null;
+
+    // 切换视图
+    function showView(view) {
+      document.getElementById('view-loading').classList.add('hidden');
+      document.getElementById('view-guest').classList.add('hidden');
+      document.getElementById('view-loggedin').classList.add('hidden');
+      document.getElementById('view-' + view).classList.remove('hidden');
     }
+
+    // 显示登录表单
+    function showLogin() {
+      document.getElementById('login-panel').classList.remove('hidden');
+      document.getElementById('register-panel').classList.add('hidden');
+    }
+
+    // 显示注册表单
+    function showRegister() {
+      document.getElementById('login-panel').classList.add('hidden');
+      document.getElementById('register-panel').classList.remove('hidden');
+    }
+
+    // 登录处理
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = '';
+
+      try {
+        await client.connect();
+      } catch (err) {
+        errorEl.textContent = '连接失败: ' + err.message;
+        return;
+      }
+
+      try {
+        const resp = await client.login(username, password);
+        if (resp.code === 0 && resp.data?.token) {
+          client.saveToken(resp.data.token);
+          currentUser = { username: username, userId: resp.data.user_id };
+          updateWelcome();
+          showView(VIEW.LOGGEDIN);
+        } else {
+          errorEl.textContent = resp.msg || '登录失败';
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    // 注册处理
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('reg-username').value;
+      const password = document.getElementById('reg-password').value;
+      const password2 = document.getElementById('reg-password2').value;
+      const errorEl = document.getElementById('register-error');
+      errorEl.textContent = '';
+
+      if (password !== password2) {
+        errorEl.textContent = '密码不一致';
+        return;
+      }
+
+      try {
+        await client.connect();
+      } catch (err) {
+        errorEl.textContent = '连接失败: ' + err.message;
+        return;
+      }
+
+      try {
+        const resp = await client.register(username, password);
+        if (resp.code === 0) {
+          alert('注册成功，请登录');
+          showLogin();
+          // 自动填充用户名
+          document.getElementById('username').value = username;
+        } else {
+          errorEl.textContent = resp.msg || '注册失败';
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    // 切换登录/注册
+    document.getElementById('show-register').addEventListener('click', (e) => {
+      e.preventDefault();
+      showRegister();
+    });
+
+    document.getElementById('show-login').addEventListener('click', (e) => {
+      e.preventDefault();
+      showLogin();
+    });
+
+    // 退出登录
+    document.getElementById('logout-btn').addEventListener('click', (e) => {
+      e.preventDefault();
+      client.clearToken();
+      client.disconnect();
+      currentUser = null;
+      showView(VIEW.GUEST);
+    });
+
+    // 更新欢迎语
+    function updateWelcome() {
+      const el = document.getElementById('welcome-user');
+      if (currentUser) {
+        el.textContent = '欢迎, ' + currentUser.username;
+      }
+    }
+
+    // 初始化
+    async function init() {
+      const token = client.getToken();
+
+      if (!token) {
+        showView(VIEW.GUEST);
+        return;
+      }
+
+      try {
+        await client.connect();
+        const resp = await client.verifyToken();
+        if (resp.code === 0 && resp.data) {
+          currentUser = { username: resp.data.username, userId: resp.data.user_id };
+          updateWelcome();
+          showView(VIEW.LOGGEDIN);
+        } else {
+          // token 无效，清除并显示登录
+          client.clearToken();
+          showView(VIEW.GUEST);
+        }
+      } catch (err) {
+        console.error('验证 token 失败:', err);
+        client.clearToken();
+        showView(VIEW.GUEST);
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>
