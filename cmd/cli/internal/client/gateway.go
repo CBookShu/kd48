@@ -71,9 +71,15 @@ func (g *Gateway) Send(ctx context.Context, method string, payload interface{}) 
 	}
 
 	// 序列化 payload
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("序列化 payload 失败: %v", err)
+	var payloadJSON []byte
+	var err error
+	if payload == nil {
+		payloadJSON = []byte("{}")
+	} else {
+		payloadJSON, err = json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("序列化 payload 失败: %v", err)
+		}
 	}
 
 	// 构造请求
