@@ -4,13 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <title>背包 - kd48</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/web/css/style.css">
 </head>
 <body>
   <nav class="nav">
-    <a href="/">首页</a>
-    <a href="/checkin.html">签到</a>
-    <a href="/items.html">背包</a>
+    <a href="/web/">首页</a>
+    <a href="/web/checkin.html">签到</a>
+    <a href="/web/items.html">背包</a>
     <a href="#" onclick="logout()">退出</a>
   </nav>
 
@@ -21,7 +21,7 @@
     </div>
   </div>
 
-  <script src="/js/api.js"></script>
+  <script src="/web/js/api.js"></script>
   <script>
     const client = getWsClient();
 
@@ -29,7 +29,7 @@
       const token = client.getToken();
 
       if (!token) {
-        document.getElementById('items').innerHTML = '<p>请先 <a href="/">登录</a></p>';
+        document.getElementById('items').innerHTML = '<p>请先 <a href="/web/">登录</a></p>';
         return;
       }
 
@@ -47,7 +47,7 @@
         } else if (resp.code === 16) {
           // 未认证
           client.clearToken();
-          document.getElementById('items').innerHTML = '<p>登录已过期，请 <a href="/">重新登录</a></p>';
+          document.getElementById('items').innerHTML = '<p>登录已过期，请 <a href="/web/">重新登录</a></p>';
         } else {
           document.getElementById('items').textContent = resp.msg || '加载失败';
         }
