@@ -27,14 +27,14 @@ func (m *mockLobbyService) Ping(ctx context.Context, req *lobbyv1.PingRequest) (
 }
 
 type mockCheckinService struct {
-	checkinCalled  bool
+	checkinCalled   bool
 	getStatusCalled bool
-	checkinErr     error
-	getStatusErr   error
-	lastUserID     int64
+	checkinErr      error
+	getStatusErr    error
+	lastUserID      int64
 }
 
-func (m *mockCheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.ApiResponse, error) {
+func (m *mockCheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
 	m.checkinCalled = true
 	if m.checkinErr != nil {
 		return nil, m.checkinErr
@@ -43,13 +43,13 @@ func (m *mockCheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRe
 	if userID, ok := ctx.Value("user_id").(int64); ok {
 		m.lastUserID = userID
 	}
-	return &lobbyv1.ApiResponse{
-		Code:    int32(lobbyv1.ErrorCode_SUCCESS),
-		Message: "success",
+	return &lobbyv1.CheckinData{
+		ContinuousDays: 1,
+		Rewards:        map[int32]int64{1001: 100},
 	}, nil
 }
 
-func (m *mockCheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.ApiResponse, error) {
+func (m *mockCheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.CheckinStatusData, error) {
 	m.getStatusCalled = true
 	if m.getStatusErr != nil {
 		return nil, m.getStatusErr
@@ -57,9 +57,10 @@ func (m *mockCheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStat
 	if userID, ok := ctx.Value("user_id").(int64); ok {
 		m.lastUserID = userID
 	}
-	return &lobbyv1.ApiResponse{
-		Code:    int32(lobbyv1.ErrorCode_SUCCESS),
-		Message: "success",
+	return &lobbyv1.CheckinStatusData{
+		PeriodId:     1,
+		PeriodName:   "Test Period",
+		TodayChecked: false,
 	}, nil
 }
 
@@ -69,7 +70,7 @@ type mockItemService struct {
 	lastUserID       int64
 }
 
-func (m *mockItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.ApiResponse, error) {
+func (m *mockItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.MyItemsData, error) {
 	m.getMyItemsCalled = true
 	if m.getMyItemsErr != nil {
 		return nil, m.getMyItemsErr
@@ -77,9 +78,8 @@ func (m *mockItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItem
 	if userID, ok := ctx.Value("user_id").(int64); ok {
 		m.lastUserID = userID
 	}
-	return &lobbyv1.ApiResponse{
-		Code:    int32(lobbyv1.ErrorCode_SUCCESS),
-		Message: "success",
+	return &lobbyv1.MyItemsData{
+		Items: map[int32]int64{1001: 1000},
 	}, nil
 }
 

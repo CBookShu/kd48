@@ -17,13 +17,13 @@ type lobbyPing interface {
 
 // checkinService 签到服务接口
 type checkinService interface {
-	Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.ApiResponse, error)
-	GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.ApiResponse, error)
+	Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error)
+	GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.CheckinStatusData, error)
 }
 
 // itemService 物品服务接口
 type itemService interface {
-	GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.ApiResponse, error)
+	GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.MyItemsData, error)
 }
 
 type ingressServer struct {

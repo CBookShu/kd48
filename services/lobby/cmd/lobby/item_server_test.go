@@ -7,10 +7,13 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func setupItemTest(t *testing.T) (*ItemService, *miniredis.Miniredis) {
@@ -35,13 +38,9 @@ func TestItemService_GetMyItems_Success(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	rdb.HSet(ctx, "kd48:user_items:12345", "1001", "1000", "1002", "500")
 
-	resp, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
+	data, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_SUCCESS), resp.Code)
-
-	var data lobbyv1.MyItemsData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 	assert.Equal(t, int64(1000), data.Items[1001])
 	assert.Equal(t, int64(500), data.Items[1002])
 }
@@ -52,10 +51,12 @@ func TestItemService_GetMyItems_NotAuthenticated(t *testing.T) {
 
 	ctx := context.Background() // 没有 user_id
 
-	resp, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
+	_, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_USER_NOT_AUTHENTICATED), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), st.Code())
 }
 
 func TestItemService_GetMyItems_EmptyInventory(t *testing.T) {
@@ -64,13 +65,9 @@ func TestItemService_GetMyItems_EmptyInventory(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
 
-	resp, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
+	data, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_SUCCESS), resp.Code)
-
-	var data lobbyv1.MyItemsData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 	assert.Empty(t, data.Items)
 }
 
@@ -89,17 +86,13 @@ func TestItemService_GetMyItems_DifferentUsers(t *testing.T) {
 	rdb.HSet(ctx2, "kd48:user_items:222", "1001", "200")
 
 	// 用户1查询
-	resp1, err := svc.GetMyItems(ctx1, &lobbyv1.GetMyItemsRequest{})
+	data1, err := svc.GetMyItems(ctx1, &lobbyv1.GetMyItemsRequest{})
 	require.NoError(t, err)
-	var data1 lobbyv1.MyItemsData
-	require.NoError(t, resp1.Data.UnmarshalTo(&data1))
 	assert.Equal(t, int64(100), data1.Items[1001])
 
 	// 用户2查询
-	resp2, err := svc.GetMyItems(ctx2, &lobbyv1.GetMyItemsRequest{})
+	data2, err := svc.GetMyItems(ctx2, &lobbyv1.GetMyItemsRequest{})
 	require.NoError(t, err)
-	var data2 lobbyv1.MyItemsData
-	require.NoError(t, resp2.Data.UnmarshalTo(&data2))
 	assert.Equal(t, int64(200), data2.Items[1001])
 }
 
@@ -113,11 +106,9 @@ func TestItemService_GetMyItems_LargeNumbers(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	rdb.HSet(ctx, "kd48:user_items:12345", "1001", "999999999999")
 
-	resp, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
+	data, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
 	require.NoError(t, err)
-	var data lobbyv1.MyItemsData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 	assert.Equal(t, int64(999999999999), data.Items[1001])
 }
 
@@ -135,12 +126,8 @@ func TestItemService_GetMyItems_ManyItems(t *testing.T) {
 	}
 	rdb.HSet(ctx, "kd48:user_items:12345", fields)
 
-	resp, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
+	data, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_SUCCESS), resp.Code)
-
-	var data lobbyv1.MyItemsData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 	assert.Len(t, data.Items, 100)
 }

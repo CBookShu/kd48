@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/services/lobby/internal/checkin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func setupCheckinTest(t *testing.T) (*CheckinService, *miniredis.Miniredis) {
@@ -51,15 +54,9 @@ func TestCheckinService_GetStatus_Success(t *testing.T) {
 	defer mr.Close()
 
 	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
-	resp, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
+	data, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_SUCCESS), resp.Code)
-
-	// 解析响应数据
-	var data lobbyv1.CheckinStatusData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
-
 	assert.Equal(t, int64(1), data.PeriodId)
 	assert.Equal(t, "Test Period", data.PeriodName)
 	assert.False(t, data.TodayChecked)
@@ -73,10 +70,12 @@ func TestCheckinService_GetStatus_NotAuthenticated(t *testing.T) {
 	defer mr.Close()
 
 	ctx := context.Background() // 没有 user_id
-	resp, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
+	_, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_USER_NOT_AUTHENTICATED), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), st.Code())
 }
 
 func TestCheckinService_GetStatus_NoActivePeriod(t *testing.T) {
@@ -89,10 +88,12 @@ func TestCheckinService_GetStatus_NoActivePeriod(t *testing.T) {
 	// 不设置 period
 
 	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
-	resp, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
+	_, err = svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), st.Code())
 }
 
 func TestCheckinService_GetStatus_AfterCheckin(t *testing.T) {
@@ -106,11 +107,8 @@ func TestCheckinService_GetStatus_AfterCheckin(t *testing.T) {
 	require.NoError(t, err)
 
 	// 再获取状态
-	resp, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
+	data, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 	require.NoError(t, err)
-
-	var data lobbyv1.CheckinStatusData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 
 	assert.True(t, data.TodayChecked)
 	assert.Equal(t, int32(1), data.ContinuousDays)
@@ -126,14 +124,9 @@ func TestCheckinService_Checkin_Success(t *testing.T) {
 	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
 
 	// 第一次签到
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	data, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_SUCCESS), resp.Code)
-
-	var data lobbyv1.CheckinData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
-
 	assert.Equal(t, int32(1), data.ContinuousDays)
 	assert.Equal(t, map[int32]int64{1001: 100}, data.Rewards) // 第1天奖励
 }
@@ -149,10 +142,12 @@ func TestCheckinService_Checkin_AlreadyToday(t *testing.T) {
 	require.NoError(t, err)
 
 	// 同一天再次签到
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	_, err = svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_CHECKIN_ALREADY_TODAY), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_CHECKIN_ALREADY_TODAY), st.Code())
 }
 
 func TestCheckinService_Checkin_ContinuousDays(t *testing.T) {
@@ -171,11 +166,8 @@ func TestCheckinService_Checkin_ContinuousDays(t *testing.T) {
 	})
 
 	// 今天签到，应该是连续第3天
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	data, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 	require.NoError(t, err)
-
-	var data lobbyv1.CheckinData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 
 	assert.Equal(t, int32(3), data.ContinuousDays)
 	// 应该获得第3天奖励 + 连续3天奖励
@@ -199,11 +191,8 @@ func TestCheckinService_Checkin_BreakContinuous(t *testing.T) {
 	})
 
 	// 今天签到，连续天数应该重置为1
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	data, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 	require.NoError(t, err)
-
-	var data lobbyv1.CheckinData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 
 	assert.Equal(t, int32(1), data.ContinuousDays) // 连续天数重置为1
 	// ClaimedDays 不会重置，所以获得第6天的奖励
@@ -217,10 +206,12 @@ func TestCheckinService_Checkin_NotAuthenticated(t *testing.T) {
 	defer mr.Close()
 
 	ctx := context.Background() // 没有 user_id
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	_, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_USER_NOT_AUTHENTICATED), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), st.Code())
 }
 
 func TestCheckinService_Checkin_NoActivePeriod(t *testing.T) {
@@ -233,10 +224,12 @@ func TestCheckinService_Checkin_NoActivePeriod(t *testing.T) {
 	// 不设置 period
 
 	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	_, err = svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 
-	require.NoError(t, err)
-	assert.Equal(t, int32(lobbyv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), resp.Code)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Code(commonv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), st.Code())
 }
 
 func TestCheckinService_Checkin_NewPeriodReset(t *testing.T) {
@@ -254,11 +247,8 @@ func TestCheckinService_Checkin_NewPeriodReset(t *testing.T) {
 	})
 
 	// 新期签到，应该重置
-	resp, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
+	data, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 	require.NoError(t, err)
-
-	var data lobbyv1.CheckinData
-	require.NoError(t, resp.Data.UnmarshalTo(&data))
 
 	// 新期第一天签到
 	assert.Equal(t, int32(1), data.ContinuousDays)

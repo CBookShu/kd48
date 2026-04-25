@@ -6,10 +6,13 @@ import (
 	"log/slog"
 	"time"
 
+	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/services/lobby/internal/checkin"
 	"github.com/CBookShu/kd48/services/lobby/internal/item"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // PeriodConfig 期配置
@@ -52,26 +55,26 @@ func (s *CheckinService) SetContinuousRewards(rewards map[int]map[int32]int64) {
 }
 
 // Checkin 签到
-func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.ApiResponse, error) {
+func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
 	userID, ok := ctx.Value("user_id").(int64)
 	if !ok {
-		return errorResponse(lobbyv1.ErrorCode_USER_NOT_AUTHENTICATED, "user not authenticated"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
 	if s.period == nil {
-		return errorResponse(lobbyv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE, "no active period"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), "签到期未开启")
 	}
 
 	// 获取用户签到状态
-	status, err := s.checkinStore.GetStatus(ctx, userID)
+	checkinStatus, err := s.checkinStore.GetStatus(ctx, userID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to get checkin status", "user_id", userID, "error", err)
-		return errorResponse(lobbyv1.ErrorCode_INTERNAL_ERROR, "failed to get status"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "获取签到状态失败")
 	}
 
 	// 检查是否需要重置（新期开始）
-	if status.PeriodID != s.period.PeriodID {
-		status = &checkin.UserCheckinStatus{
+	if checkinStatus.PeriodID != s.period.PeriodID {
+		checkinStatus = &checkin.UserCheckinStatus{
 			PeriodID:    s.period.PeriodID,
 			ClaimedDays: []int{},
 		}
@@ -79,25 +82,25 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 
 	// 检查今日是否已签到
 	today := time.Now().Format("2006-01-02")
-	if status.LastCheckinDate == today {
-		return errorResponse(lobbyv1.ErrorCode_CHECKIN_ALREADY_TODAY, "already checked in today"), nil
+	if checkinStatus.LastCheckinDate == today {
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_CHECKIN_ALREADY_TODAY), "今日已签到")
 	}
 
 	// 计算连续天数
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	if status.LastCheckinDate == yesterday {
-		status.ContinuousDays++
+	if checkinStatus.LastCheckinDate == yesterday {
+		checkinStatus.ContinuousDays++
 	} else {
-		status.ContinuousDays = 1
+		checkinStatus.ContinuousDays = 1
 	}
 
 	// 计算奖励
-	day := len(status.ClaimedDays) + 1
+	day := len(checkinStatus.ClaimedDays) + 1
 	rewards := s.calculator.GetDailyReward(day)
 
 	// 检查连续奖励
-	if s.calculator.HasContinuousReward(status.ContinuousDays) {
-		continuousReward := s.calculator.GetContinuousReward(status.ContinuousDays)
+	if s.calculator.HasContinuousReward(checkinStatus.ContinuousDays) {
+		continuousReward := s.calculator.GetContinuousReward(checkinStatus.ContinuousDays)
 		rewards = checkin.MergeRewards(rewards, continuousReward)
 	}
 
@@ -105,47 +108,45 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 	for itemID, count := range rewards {
 		if err := s.itemStore.AddItem(ctx, userID, itemID, count); err != nil {
 			slog.ErrorContext(ctx, "failed to add items", "user_id", userID, "error", err)
-			return errorResponse(lobbyv1.ErrorCode_INTERNAL_ERROR, "failed to add items"), nil
+			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "发放奖励失败")
 		}
 	}
 
 	// 更新签到状态
-	status.LastCheckinDate = today
-	status.ClaimedDays = append(status.ClaimedDays, day)
-	if err := s.checkinStore.UpdateStatus(ctx, userID, status); err != nil {
+	checkinStatus.LastCheckinDate = today
+	checkinStatus.ClaimedDays = append(checkinStatus.ClaimedDays, day)
+	if err := s.checkinStore.UpdateStatus(ctx, userID, checkinStatus); err != nil {
 		slog.ErrorContext(ctx, "failed to update checkin status", "user_id", userID, "error", err)
-		return errorResponse(lobbyv1.ErrorCode_INTERNAL_ERROR, "failed to update status"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "更新签到状态失败")
 	}
 
-	data := &lobbyv1.CheckinData{
-		ContinuousDays: int32(status.ContinuousDays),
+	return &lobbyv1.CheckinData{
+		ContinuousDays: int32(checkinStatus.ContinuousDays),
 		Rewards:        rewards,
-	}
-
-	return successResponse(data)
+	}, nil
 }
 
 // GetStatus 获取签到状态
-func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.ApiResponse, error) {
+func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.CheckinStatusData, error) {
 	userID, ok := ctx.Value("user_id").(int64)
 	if !ok {
-		return errorResponse(lobbyv1.ErrorCode_USER_NOT_AUTHENTICATED, "user not authenticated"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
 	if s.period == nil {
-		return errorResponse(lobbyv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE, "no active period"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), "签到期未开启")
 	}
 
 	// 获取用户签到状态
-	status, err := s.checkinStore.GetStatus(ctx, userID)
+	checkinStatus, err := s.checkinStore.GetStatus(ctx, userID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to get checkin status", "user_id", userID, "error", err)
-		return errorResponse(lobbyv1.ErrorCode_INTERNAL_ERROR, "failed to get status"), nil
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "获取签到状态失败")
 	}
 
 	// 检查是否需要重置
-	if status.PeriodID != s.period.PeriodID {
-		status = &checkin.UserCheckinStatus{
+	if checkinStatus.PeriodID != s.period.PeriodID {
+		checkinStatus = &checkin.UserCheckinStatus{
 			PeriodID:    s.period.PeriodID,
 			ClaimedDays: []int{},
 		}
@@ -156,10 +157,10 @@ func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRe
 	data := &lobbyv1.CheckinStatusData{
 		PeriodId:          s.period.PeriodID,
 		PeriodName:        s.period.PeriodName,
-		TodayChecked:      status.LastCheckinDate == today,
-		ContinuousDays:    int32(status.ContinuousDays),
-		TotalDays:         int32(len(status.ClaimedDays)),
-		ClaimedContinuous: getClaimedContinuous(status.ClaimedDays, s.calculator),
+		TodayChecked:      checkinStatus.LastCheckinDate == today,
+		ContinuousDays:    int32(checkinStatus.ContinuousDays),
+		TotalDays:         int32(len(checkinStatus.ClaimedDays)),
+		ClaimedContinuous: getClaimedContinuous(checkinStatus.ClaimedDays, s.calculator),
 	}
 
 	// 添加每日奖励配置
@@ -178,7 +179,7 @@ func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRe
 		})
 	}
 
-	return successResponse(data)
+	return data, nil
 }
 
 // getClaimedContinuous 获取已领取的连续奖励天数
