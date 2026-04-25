@@ -35,7 +35,11 @@
   <script src="/js/checkin.js"></script>
   <script>
     async function init() {
-      if (!checkAuth()) {
+      const client = getWsClient();
+      const token = client.getToken();
+
+      if (!token) {
+        document.getElementById('status').innerHTML = '<p>请先 <a href="/">登录</a></p>';
         return;
       }
 
@@ -44,7 +48,12 @@
         await loadStatus();
       } catch (err) {
         console.error('初始化失败:', err);
-        document.getElementById('status').textContent = '连接失败: ' + err.message;
+        if (err.message.includes('未认证') || err.message.includes('token')) {
+          client.clearToken();
+          document.getElementById('status').innerHTML = '<p>登录已过期，请 <a href="/">重新登录</a></p>';
+        } else {
+          document.getElementById('status').textContent = '连接失败: ' + err.message;
+        }
       }
     }
 
