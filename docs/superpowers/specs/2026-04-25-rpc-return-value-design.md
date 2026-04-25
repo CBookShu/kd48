@@ -73,7 +73,7 @@ api/proto/
 ├── common/
 │   └── v1/
 │       ├── api_response.proto    # 公共 ApiResponse + ErrorCode
-│       └── errors.go             # code → message 映射（服务端用）
+│       └── errors.go             # (可选) 错误消息参考
 ├── user/
 │   └── v1/
 │       └── user.proto
@@ -125,31 +125,38 @@ enum ErrorCode {
 }
 ```
 
-### api/proto/common/v1/errors.go
+### api/proto/common/v1/errors.go (可选)
+
+errors.go 是可选的错误消息参考，用于：
+- 服务端返回错误时构造 message
+- 文档参考
+
 ```go
 package commonv1
 
+// 错误消息参考表（可选，用于构造错误或文档）
 var ErrorMessages = map[ErrorCode]string{
-    ErrorCode_SUCCESS:                 "成功",
-    ErrorCode_INVALID_REQUEST:         "请求参数错误",
-    ErrorCode_INTERNAL_ERROR:          "内部错误",
-    ErrorCode_SERVICE_UNAVAILABLE:     "服务不可用",
-    ErrorCode_USER_NOT_FOUND:          "用户不存在",
-    ErrorCode_USER_NOT_AUTHENTICATED:  "未认证",
-    ErrorCode_CHECKIN_ALREADY_TODAY:   "今日已签到",
-    ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE:  "签到期未开启",
-    ErrorCode_CHECKIN_PERIOD_EXPIRED:  "签到期已过期",
-    ErrorCode_ITEM_NOT_FOUND:          "物品不存在",
-    ErrorCode_ITEM_INSUFFICIENT:       "物品不足",
-}
-
-func ErrorMessage(code ErrorCode) string {
-    if msg, ok := ErrorMessages[code]; ok {
-        return msg
-    }
-    return "未知错误"
+    // 系统错误 (gRPC 标准码)
+    ErrorCode(1):  "请求参数错误",
+    ErrorCode(2):  "内部错误",
+    ErrorCode(3):  "服务不可用",
+    
+    // 通用业务错误 (100-199)
+    ErrorCode(100): "用户不存在",
+    ErrorCode(101): "未认证",
+    
+    // 签到相关 (200-299)
+    ErrorCode(200): "今日已签到",
+    ErrorCode(201): "签到期未开启",
+    ErrorCode(202): "签到期已过期",
+    
+    // 物品相关 (300-399)
+    ErrorCode(300): "物品不存在",
+    ErrorCode(301): "物品不足",
 }
 ```
+
+**注意**：网关不依赖此文件，直接透传服务端返回的 code 和 message。
 
 ### 响应格式
 
@@ -175,50 +182,76 @@ func ErrorMessage(code ErrorCode) string {
 ```go
 import (
     commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
-    "google.golang.org/grpc/codes"
     "google.golang.org/grpc/status"
 )
 
-// 将 gRPC 错误转为 ApiResponse
+// 将 gRPC 错误转为 ApiResponse（直接透传，不做映射）
 func toApiResponse(err error) *commonv1.ApiResponse {
     if err == nil {
         return &commonv1.ApiResponse{Code: 0}
     }
     st, ok := status.FromError(err)
     if !ok {
-        code := commonv1.ErrorCode_INTERNAL_ERROR
         return &commonv1.ApiResponse{
-            Code:    int32(code),
-            Message: commonv1.ErrorMessage(code),
+            Code:    int32(commonv1.ErrorCode_INTERNAL_ERROR),
+            Message: err.Error(),
         }
     }
-    code := errorCodeFromGRPC(st.Code())
+    // 直接透传 gRPC 的 code 和 message
     return &commonv1.ApiResponse{
-        Code:    int32(code),
-        Message: commonv1.ErrorMessage(code),
-    }
-}
-
-// gRPC Code -> ErrorCode 映射
-func errorCodeFromGRPC(code codes.Code) commonv1.ErrorCode {
-    switch code {
-    case codes.OK:
-        return commonv1.ErrorCode_SUCCESS
-    case codes.InvalidArgument:
-        return commonv1.ErrorCode_INVALID_REQUEST
-    case codes.Internal:
-        return commonv1.ErrorCode_INTERNAL_ERROR
-    case codes.Unavailable:
-        return commonv1.ErrorCode_SERVICE_UNAVAILABLE
-    case codes.Unauthenticated:
-        return commonv1.ErrorCode_USER_NOT_AUTHENTICATED
-    case codes.NotFound:
-        return commonv1.ErrorCode_USER_NOT_FOUND
-    default:
-        return commonv1.ErrorCode_INTERNAL_ERROR
+        Code:    int32(st.Code()),
+        Message: st.Message(),
     }
 }
 ```
+
+---
+
+## 错误码分类（系统 vs 业务）
+
+### 范围定义
+
+| 范围 | 来源 | 含义 |
+|------|------|------|
+| 0 | gRPC OK | 成功 |
+| 1-16 | gRPC 标准码 | 系统错误 (InvalidArgument, Internal, Unavailable...) |
+| 100-199 | 业务码 | 通用错误 |
+| 200-299 | 业务码 | 签到相关 |
+| 300-399 | 业务码 | 物品相关 |
+| 1000+ | 业务码 | 其他业务模块 |
+
+### 设计原则
+
+**gRPC 标准码 (0-16)：系统错误**
+- 由 gRPC 框架生成
+- 如：InvalidArgument、NotFound、Internal、Unavailable
+
+**业务码 (100+)：业务错误**
+- 由业务代码主动返回
+- 如：`status.Errorf(codes.Code(200), "今日已签到")`
+
+### 网关透传规则
+
+```go
+func toApiResponse(err error) *commonv1.ApiResponse {
+    st, _ := status.FromError(err)
+    // gRPC code (0-16) 和业务 code (100+) 不会冲突
+    return &commonv1.ApiResponse{
+        Code:    int32(st.Code()),
+        Message: st.Message(),
+    }
+}
+```
+
+- 网关不映射、不转换
+- 直接透传 code 和 message
+- 客户端看到的就是服务端返回的
+
+### 约定
+
+- 业务代码必须从 **100** 开始
+- 永远不使用 gRPC 标准码（0-16）作为业务错误
+- 业务错误使用 `codes.Code(200)` 格式返回
 
 ---
 
@@ -332,7 +365,7 @@ func (s *UserService) GetUser(ctx context.Context, req *userv1.GetUserRequest) (
 
 ### 新建公共包
 - `api/proto/common/v1/api_response.proto` - 公共 ApiResponse + ErrorCode 定义
-- `api/proto/common/v1/errors.go` - code → message 映射（服务端用）
+- `api/proto/common/v1/errors.go` - (可选) 错误消息参考，用于文档或辅助
 
 ### Proto 文件（删除 lobby 包的 ApiResponse）
 - `api/proto/lobby/v1/common.proto` - 删除 ApiResponse + ErrorCode 定义
@@ -344,10 +377,10 @@ func (s *UserService) GetUser(ctx context.Context, req *userv1.GetUserRequest) (
 - 更新所有 import 引用
 
 ### 网关层
-- `gateway/cmd/gateway/ingress.go` - 使用 commonv1.ApiResponse，添加 gRPC status → ApiResponse 转换逻辑，填充 message
+- `gateway/cmd/gateway/ingress.go` - 使用 commonv1.ApiResponse，透传 gRPC status 的 code 和 message
 
 ### 服务端
-- `services/lobby/cmd/lobby/checkin_server.go` - 改用 status.Errorf
+- `services/lobby/cmd/lobby/checkin_server.go` - 改用 status.Errorf(codes.Code(200), "message")
 - `services/user/...` - 同样改为 status.Errorf（如果还没改）
 
 ### 客户端 (CLI)
