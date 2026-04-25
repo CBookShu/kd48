@@ -304,14 +304,33 @@ func (h *Handler) handleResponse(resp *client.WsResponse) string {
 
 | 字段 | 用途 |
 |------|------|
-| `Code` | 业务逻辑判断（如：code==101 跳转登录页） |
+| `Code` | 业务逻辑判断（使用 proto 定义的值） |
 | `Msg` | 直接显示给用户（服务端已填充好） |
+
+**Code 正确用法：**
+```go
+import commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
+
+// ✅ 使用 proto 定义的常量
+if resp.Code == int32(commonv1.ErrorCode_USER_NOT_AUTHENTICATED) {
+    // 跳转登录页
+}
+
+// ✅ 使用 proto 定义的常量
+if resp.Code == int32(commonv1.ErrorCode_CHECKIN_ALREADY_TODAY) {
+    // 提示已签到
+}
+
+// ❌ 不要手写数字
+// if resp.Code == 2001 { ... }
+```
 
 ### 3. 客户端不需要的错误处理代码
 
-- ❌ 不需要 `errors.go`
+- ❌ 不需要 `errors.go`（服务端返回 message）
 - ❌ 不需要 `ErrorMessages` 映射表
 - ❌ 不需要查表翻译 message
+- ✅ 需要 proto 定义（用于业务逻辑判断）
 
 ---
 
