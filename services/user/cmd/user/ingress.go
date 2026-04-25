@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -20,10 +23,11 @@ type userLoginRegister interface {
 type ingressServer struct {
 	gatewayv1.UnimplementedGatewayIngressServer
 	inner userLoginRegister
+	rdb   redis.UniversalClient // Redis client for token verification
 }
 
-func newIngressServer(inner userLoginRegister) *ingressServer {
-	return &ingressServer{inner: inner}
+func newIngressServer(inner userLoginRegister, rdb redis.UniversalClient) *ingressServer {
+	return &ingressServer{inner: inner, rdb: rdb}
 }
 
 func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest) (*gatewayv1.IngressReply, error) {
@@ -68,8 +72,55 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		if s.inner == nil {
 			return nil, status.Error(codes.Internal, "ingress inner not configured")
 		}
-		// No payload unmarshalling needed - user_id comes from context
-		out, err := s.inner.VerifyToken(ctx, &userv1.VerifyTokenRequest{})
+
+		// Check if user_id is already in context (from gateway session)
+		userIDVal := ctx.Value("user_id")
+		if userIDVal != nil {
+			// User already authenticated via gateway session
+			out, err := s.inner.VerifyToken(ctx, &userv1.VerifyTokenRequest{})
+			if err != nil {
+				return nil, err
+			}
+			b, err := protojson.Marshal(out)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
+			}
+			return &gatewayv1.IngressReply{JsonPayload: b}, nil
+		}
+
+		// No user_id in context - verify token from payload
+		if s.rdb == nil {
+			return nil, status.Error(codes.Internal, "redis not configured")
+		}
+
+		// Parse payload to extract _token
+		var payload map[string]interface{}
+		if err := json.Unmarshal(req.GetJsonPayload(), &payload); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid json: %v", err)
+		}
+
+		token, ok := payload["_token"].(string)
+		if !ok || token == "" {
+			return nil, status.Error(codes.Unauthenticated, "token required")
+		}
+
+		// Verify token in Redis
+		sessionKey := fmt.Sprintf("user:session:%s", token)
+		sessionValue, err := s.rdb.Get(ctx, sessionKey).Result()
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
+		}
+
+		// Parse session value (format: "userID:username")
+		var userID int64
+		var username string
+		if _, err := fmt.Sscanf(sessionValue, "%d:%s", &userID, &username); err != nil {
+			return nil, status.Error(codes.Internal, "invalid session format")
+		}
+
+		// Create context with user_id for the service
+		ctxWithUser := context.WithValue(ctx, "user_id", userID)
+		out, err := s.inner.VerifyToken(ctxWithUser, &userv1.VerifyTokenRequest{})
 		if err != nil {
 			return nil, err
 		}

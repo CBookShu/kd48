@@ -81,6 +81,16 @@ func main() {
 		DisplayName:        "Register",
 		EstablishesSession: true,
 	}
+	verifyTokenRoute := &gatewayv1.GatewayRouteSpec{
+		SchemaVersion:      1,
+		RouteId:            "verify-token",
+		WsMethod:           "/user.v1.UserService/VerifyToken",
+		ServiceType:        "user",
+		IngressRoute:       "/user.v1.UserService/VerifyToken",
+		Public:             true, // Public API - validates token from payload
+		DisplayName:        "Verify Token",
+		EstablishesSession: false,
+	}
 	loginJSON, err := marshal.Marshal(loginRoute)
 	if err != nil {
 		slog.Error("marshal login route", "error", err)
@@ -89,6 +99,11 @@ func main() {
 	regJSON, err := marshal.Marshal(regRoute)
 	if err != nil {
 		slog.Error("marshal register route", "error", err)
+		os.Exit(1)
+	}
+	verifyTokenJSON, err := marshal.Marshal(verifyTokenRoute)
+	if err != nil {
+		slog.Error("marshal verify-token route", "error", err)
 		os.Exit(1)
 	}
 
@@ -105,6 +120,100 @@ func main() {
 	_, err = cli.Put(ctx, "kd48/meta/gateway-routes/register", string(regJSON))
 	if err != nil {
 		slog.Error("put register route", "error", err)
+		os.Exit(1)
+	}
+	_, err = cli.Put(ctx, "kd48/meta/gateway-routes/verify-token", string(verifyTokenJSON))
+	if err != nil {
+		slog.Error("put verify-token route", "error", err)
+		os.Exit(1)
+	}
+
+	// Lobby Service Type
+	lobbyType := &gatewayv1.ServiceTypeSpec{
+		SchemaVersion: 1,
+		TypeKey:       "lobby",
+		DisplayName:   "Lobby Service",
+		RoutingMode:   gatewayv1.ServiceRoutingMode_SERVICE_ROUTING_MODE_STATELESS_LB,
+		Discovery: &gatewayv1.ServiceTypeDiscovery{
+			GrpcEtcdTarget: "etcd:///kd48/lobby-service",
+			LoadBalancing:  "round_robin",
+		},
+		Ingress: &gatewayv1.ServiceTypeIngress{UseGatewayIngress: true},
+	}
+	lobbyTypeJSON, err := marshal.Marshal(lobbyType)
+	if err != nil {
+		slog.Error("marshal lobby type", "error", err)
+		os.Exit(1)
+	}
+
+	// Checkin routes
+	checkinRoute := &gatewayv1.GatewayRouteSpec{
+		SchemaVersion:      1,
+		RouteId:            "checkin",
+		WsMethod:           "/lobby.v1.CheckinService/Checkin",
+		ServiceType:        "lobby",
+		IngressRoute:       "/lobby.v1.CheckinService/Checkin",
+		Public:             false,
+		DisplayName:        "Checkin",
+		EstablishesSession: false,
+	}
+	getStatusRoute := &gatewayv1.GatewayRouteSpec{
+		SchemaVersion:      1,
+		RouteId:            "get-checkin-status",
+		WsMethod:           "/lobby.v1.CheckinService/GetStatus",
+		ServiceType:        "lobby",
+		IngressRoute:       "/lobby.v1.CheckinService/GetStatus",
+		Public:             false,
+		DisplayName:        "Get Checkin Status",
+		EstablishesSession: false,
+	}
+
+	// Item routes
+	getItemsRoute := &gatewayv1.GatewayRouteSpec{
+		SchemaVersion:      1,
+		RouteId:            "get-my-items",
+		WsMethod:           "/lobby.v1.ItemService/GetMyItems",
+		ServiceType:        "lobby",
+		IngressRoute:       "/lobby.v1.ItemService/GetMyItems",
+		Public:             false,
+		DisplayName:        "Get My Items",
+		EstablishesSession: false,
+	}
+
+	checkinJSON, err := marshal.Marshal(checkinRoute)
+	if err != nil {
+		slog.Error("marshal checkin route", "error", err)
+		os.Exit(1)
+	}
+	getStatusJSON, err := marshal.Marshal(getStatusRoute)
+	if err != nil {
+		slog.Error("marshal get-status route", "error", err)
+		os.Exit(1)
+	}
+	getItemsJSON, err := marshal.Marshal(getItemsRoute)
+	if err != nil {
+		slog.Error("marshal get-items route", "error", err)
+		os.Exit(1)
+	}
+
+	_, err = cli.Put(ctx, "kd48/meta/service-types/lobby", string(lobbyTypeJSON))
+	if err != nil {
+		slog.Error("put lobby service type", "error", err)
+		os.Exit(1)
+	}
+	_, err = cli.Put(ctx, "kd48/meta/gateway-routes/checkin", string(checkinJSON))
+	if err != nil {
+		slog.Error("put checkin route", "error", err)
+		os.Exit(1)
+	}
+	_, err = cli.Put(ctx, "kd48/meta/gateway-routes/get-checkin-status", string(getStatusJSON))
+	if err != nil {
+		slog.Error("put get-status route", "error", err)
+		os.Exit(1)
+	}
+	_, err = cli.Put(ctx, "kd48/meta/gateway-routes/get-my-items", string(getItemsJSON))
+	if err != nil {
+		slog.Error("put get-items route", "error", err)
 		os.Exit(1)
 	}
 
@@ -138,5 +247,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("ok: service-types/user + gateway-routes/login+register + routing/mysql_routes+redis_routes")
+	fmt.Println("ok: service-types/user+lobby + gateway-routes + routing/mysql_routes+redis_routes")
 }

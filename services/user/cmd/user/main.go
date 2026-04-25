@@ -161,7 +161,14 @@ func main() {
 
 	userSvc := NewUserService(router, time.Duration(c.Session.ExpireHours)*time.Hour)
 	userv1.RegisterUserServiceServer(s, userSvc)
-	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc))
+
+	// Get the default Redis client for ingress token verification
+	var defaultRedis redis.UniversalClient
+	for _, rdb := range redisPools {
+		defaultRedis = rdb
+		break
+	}
+	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(userSvc, defaultRedis))
 
 	go func() {
 		slog.Info("User Service gRPC server listening", "port", c.UserService.Port)

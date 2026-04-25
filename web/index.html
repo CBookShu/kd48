@@ -133,7 +133,7 @@
         const resp = await client.login(username, password);
         if (resp.code === 0 && resp.data?.token) {
           client.saveToken(resp.data.token);
-          currentUser = { username: username, userId: resp.data.user_id };
+          currentUser = { username: username, userId: resp.data.userId || resp.data.user_id };
           updateWelcome();
           showView(VIEW.LOGGEDIN);
         } else {
@@ -221,7 +221,7 @@
         await client.connect();
         const resp = await client.verifyToken();
         if (resp.code === 0 && resp.data) {
-          currentUser = { username: resp.data.username, userId: resp.data.user_id };
+          currentUser = { username: resp.data.username, userId: resp.data.userId || resp.data.user_id };
           updateWelcome();
           showView(VIEW.LOGGEDIN);
         } else {
