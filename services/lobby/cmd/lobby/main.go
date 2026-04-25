@@ -189,19 +189,22 @@ func main() {
 
 	lobbySvc := NewLobbyService(router)
 	lobbyv1.RegisterLobbyServiceServer(s, lobbySvc)
-	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(lobbySvc))
 
-	// 注册 ItemService
+	// 注册 ItemService 和 CheckinService
+	var itemSvc *ItemService
+	var checkinSvc *CheckinService
 	if rdb, ok := redisPools["default"].(*redis.Client); ok {
-		itemSvc := NewItemService(rdb)
+		itemSvc = NewItemService(rdb)
 		lobbyv1.RegisterItemServiceServer(s, itemSvc)
 
-		// 注册 CheckinService
-		checkinSvc := NewCheckinService(rdb)
+		checkinSvc = NewCheckinService(rdb)
 		lobbyv1.RegisterCheckinServiceServer(s, checkinSvc)
 	} else {
 		slog.Error("default redis pool not available or not a *redis.Client")
 	}
+
+	// 注册 GatewayIngress（包含所有服务的路由）
+	gatewayv1.RegisterGatewayIngressServer(s, newIngressServer(lobbySvc, checkinSvc, itemSvc))
 
 	go func() {
 		slog.Info("Lobby Service gRPC server listening", "port", port)

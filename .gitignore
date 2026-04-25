@@ -16,3 +16,5 @@ lobby.bin
 
 # Superpowers worktrees
 .worktrees/
+
+node_modules/

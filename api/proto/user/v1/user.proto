@@ -37,7 +37,7 @@ message RegisterReply {
 }
 
 message VerifyTokenRequest {
-  // Empty - token is validated by gateway, user_id comes from context
+  string token = 1; // Token to validate (from client localStorage)
 }
 
 message VerifyTokenData {

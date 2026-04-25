@@ -80,6 +80,56 @@ func TestExtractUserIDFromResponse(t *testing.T) {
 			data:     map[string]interface{}{"success": true, "user_id": float64(0)},
 			expected: 0,
 		},
+		{
+			name: "nested data.user_id (VerifyToken response format)",
+			data: map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"user_id":  float64(12345),
+					"username": "testuser",
+				},
+			},
+			expected: 12345,
+		},
+		{
+			name: "nested data.user_id with int64",
+			data: map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"user_id": int64(67890),
+				},
+			},
+			expected: 67890,
+		},
+		{
+			name: "nested data without user_id",
+			data: map[string]interface{}{
+				"success": true,
+				"data": map[string]interface{}{
+					"username": "testuser",
+				},
+			},
+			expected: 0,
+		},
+		{
+			name: "nested data is not a map",
+			data: map[string]interface{}{
+				"success": true,
+				"data":    "invalid",
+			},
+			expected: 0,
+		},
+		{
+			name: "both top-level and nested user_id (top-level takes precedence)",
+			data: map[string]interface{}{
+				"success": true,
+				"user_id": float64(11111),
+				"data": map[string]interface{}{
+					"user_id": float64(22222),
+				},
+			},
+			expected: 11111, // top-level user_id takes precedence
+		},
 	}
 
 	for _, tt := range tests {

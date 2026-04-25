@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
@@ -93,14 +92,14 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 			return nil, status.Error(codes.Internal, "redis not configured")
 		}
 
-		// Parse payload to extract _token
-		var payload map[string]interface{}
-		if err := json.Unmarshal(req.GetJsonPayload(), &payload); err != nil {
+		// Parse the VerifyTokenRequest to get token
+		var in userv1.VerifyTokenRequest
+		if err := protojson.Unmarshal(req.GetJsonPayload(), &in); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid json: %v", err)
 		}
 
-		token, ok := payload["_token"].(string)
-		if !ok || token == "" {
+		token := in.GetToken()
+		if token == "" {
 			return nil, status.Error(codes.Unauthenticated, "token required")
 		}
 

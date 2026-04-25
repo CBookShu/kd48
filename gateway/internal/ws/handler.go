@@ -209,6 +209,9 @@ func (h *Handler) sendResp(ctx context.Context, conn *websocket.Conn, method str
 var _ = http.StatusOK
 
 // extractUserIDFromResponse 从响应数据中提取 user_id 字段
+// 支持两种格式：
+// 1. 顶层 user_id: {"user_id": 123} (Login/Register)
+// 2. 嵌套 data.user_id: {"data": {"user_id": 123}} (VerifyToken)
 // JSON unmarshaling 默认将数字解析为 float64，需要处理多种数值类型
 func extractUserIDFromResponse(data interface{}) int64 {
 	if data == nil {
@@ -220,8 +223,20 @@ func extractUserIDFromResponse(data interface{}) int64 {
 		return 0
 	}
 
+	// 先检查顶层 user_id (Login/Register 响应格式)
 	userIDVal, exists := m["user_id"]
 	if !exists {
+		// 再检查 data 嵌套字段 (VerifyToken 响应格式)
+		dataVal, hasData := m["data"]
+		if hasData {
+			dataMap, ok := dataVal.(map[string]interface{})
+			if ok {
+				userIDVal, exists = dataMap["user_id"]
+			}
+		}
+	}
+
+	if !exists || userIDVal == nil {
 		return 0
 	}
 

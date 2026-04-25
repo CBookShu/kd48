@@ -89,7 +89,7 @@ func main() {
 		IngressRoute:       "/user.v1.UserService/VerifyToken",
 		Public:             true, // Public API - validates token from payload
 		DisplayName:        "Verify Token",
-		EstablishesSession: false,
+		EstablishesSession: true, // Restores session when token is valid
 	}
 	loginJSON, err := marshal.Marshal(loginRoute)
 	if err != nil {

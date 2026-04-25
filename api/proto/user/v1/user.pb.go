@@ -247,6 +247,7 @@ func (x *RegisterReply) GetUserId() uint64 {
 
 type VerifyTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"` // Token to validate (from client localStorage)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,6 +280,13 @@ func (x *VerifyTokenRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use VerifyTokenRequest.ProtoReflect.Descriptor instead.
 func (*VerifyTokenRequest) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *VerifyTokenRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
 }
 
 type VerifyTokenData struct {
@@ -404,8 +412,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\rRegisterReply\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x17\n" +
-	"\auser_id\x18\x03 \x01(\x04R\x06userId\"\x14\n" +
-	"\x12VerifyTokenRequest\"F\n" +
+	"\auser_id\x18\x03 \x01(\x04R\x06userId\"*\n" +
+	"\x12VerifyTokenRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"F\n" +
 	"\x0fVerifyTokenData\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x04R\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\"Z\n" +
