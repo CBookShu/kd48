@@ -75,44 +75,41 @@ type mockUserLR struct {
 	loginErr     error
 	registerErr  error
 	verifyErr    error
-	loginResp    *userv1.LoginReply
-	registerResp *userv1.RegisterReply
-	verifyResp   *userv1.VerifyTokenReply
+	loginResp    *userv1.LoginData
+	registerResp *userv1.RegisterData
+	verifyResp   *userv1.VerifyTokenData
 }
 
-func (m mockUserLR) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
+func (m mockUserLR) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginData, error) {
 	if m.loginErr != nil {
 		return nil, m.loginErr
 	}
 	if m.loginResp != nil {
 		return m.loginResp, nil
 	}
-	return &userv1.LoginReply{Success: true, Token: "test-token", UserId: 123}, nil
+	return &userv1.LoginData{Token: "test-token", UserId: 123}, nil
 }
 
-func (m mockUserLR) Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterReply, error) {
+func (m mockUserLR) Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterData, error) {
 	if m.registerErr != nil {
 		return nil, m.registerErr
 	}
 	if m.registerResp != nil {
 		return m.registerResp, nil
 	}
-	return &userv1.RegisterReply{Success: true, Token: "test-token", UserId: 123}, nil
+	return &userv1.RegisterData{Token: "test-token", UserId: 123}, nil
 }
 
-func (m mockUserLR) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenReply, error) {
+func (m mockUserLR) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenData, error) {
 	if m.verifyErr != nil {
 		return nil, m.verifyErr
 	}
 	if m.verifyResp != nil {
 		return m.verifyResp, nil
 	}
-	return &userv1.VerifyTokenReply{
-		Success: true,
-		Data: &userv1.VerifyTokenData{
-			UserId:   123,
-			Username: "testuser",
-		},
+	return &userv1.VerifyTokenData{
+		UserId:   123,
+		Username: "testuser",
 	}, nil
 }
 
@@ -207,8 +204,8 @@ func TestIngressServer_Call_Login_Success(t *testing.T) {
 
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
-	assert.Equal(t, true, got["success"])
 	assert.Equal(t, "test-token", got["token"])
+	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
 }
 
 func TestIngressServer_Call_Login_Unauthenticated(t *testing.T) {
@@ -257,8 +254,8 @@ func TestIngressServer_Call_Register_Success(t *testing.T) {
 
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
-	assert.Equal(t, true, got["success"])
 	assert.Equal(t, "test-token", got["token"])
+	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
 }
 
 func TestIngressServer_Call_Register_AlreadyExists(t *testing.T) {
@@ -332,12 +329,8 @@ func TestIngressServer_Call_VerifyToken_Success_FromRedis(t *testing.T) {
 
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
-	assert.Equal(t, true, got["success"])
-
-	// Verify the data nested structure
-	data, ok := got["data"].(map[string]interface{})
-	require.True(t, ok, "expected data to be a map")
-	assert.Equal(t, "testuser", data["username"])
+	assert.Equal(t, "testuser", got["username"])
+	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
 }
 
 func TestIngressServer_Call_VerifyToken_MissingToken(t *testing.T) {
@@ -424,10 +417,10 @@ func TestProtojson_VerifyTokenRequest_TokenField(t *testing.T) {
 	// This would have caught the original bug where protojson rejected the token field.
 
 	tests := []struct {
-		name     string
-		json     string
-		wantErr  bool
-		wantVal  string
+		name    string
+		json    string
+		wantErr bool
+		wantVal string
 	}{
 		{
 			name:    "valid token field",

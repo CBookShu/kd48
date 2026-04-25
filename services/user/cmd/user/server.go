@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
@@ -54,7 +55,7 @@ return oldToken or ""
 func (s *userService) getQueries(ctx context.Context, routingKey string) (*sqlc.Queries, error) {
 	db, _, err := s.router.ResolveDB(ctx, routingKey)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "resolve db route: %v", err)
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "resolve db route: %v", err)
 	}
 	return sqlc.New(db), nil
 }
@@ -63,7 +64,7 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		slog.ErrorContext(ctx, "Failed to generate token", "error", err)
-		return "", status.Error(codes.Internal, "internal server error")
+		return "", status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 	token := hex.EncodeToString(tokenBytes)
 	sessionKey := fmt.Sprintf("user:session:%s", token)
@@ -72,12 +73,12 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to resolve redis for session", "error", err)
-		return "", status.Error(codes.Internal, "internal server error")
+		return "", status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	if err := rdb.Set(ctx, sessionKey, sessionValue, s.tokenTTL).Err(); err != nil {
 		slog.ErrorContext(ctx, "Failed to save session to Redis", "error", err)
-		return "", status.Error(codes.Internal, "internal server error")
+		return "", status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 	return token, nil
 }
@@ -88,7 +89,7 @@ func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, use
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		slog.ErrorContext(ctx, "Failed to generate token", "error", err)
-		return "", false, status.Error(codes.Internal, "internal server error")
+		return "", false, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 	token := hex.EncodeToString(tokenBytes)
 
@@ -99,7 +100,7 @@ func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, use
 	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to resolve redis for session", "error", err)
-		return "", false, status.Error(codes.Internal, "internal server error")
+		return "", false, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	result, err := rdb.Eval(ctx, loginSessionLua,
@@ -107,7 +108,7 @@ func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, use
 		int64(s.tokenTTL.Seconds()), sessionValue, token).Result()
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to execute session Lua", "error", err)
-		return "", false, status.Error(codes.Internal, "internal server error")
+		return "", false, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	// 检查是否有旧 token
@@ -131,7 +132,7 @@ func (s *userService) publishSessionInvalidate(ctx context.Context, userID uint6
 	}
 }
 
-func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error) {
+func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginData, error) {
 	slog.InfoContext(ctx, "Received Login request", "username", req.Username)
 
 	routingKey := "sys:user:" + req.Username
@@ -144,14 +145,14 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 	user, err := queries.GetUserByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, status.Error(codes.Unauthenticated, "invalid username or password")
+			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户名或密码错误")
 		}
 		slog.ErrorContext(ctx, "GetUserByUsername failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal server error")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, status.Error(codes.Unauthenticated, "invalid username or password")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户名或密码错误")
 	}
 
 	token, hasOldToken, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
@@ -165,19 +166,18 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 
 	slog.InfoContext(ctx, "User logged in successfully", "username", user.Username)
 
-	return &userv1.LoginReply{
-		Success: true,
-		Token:   token,
-		UserId:  user.ID,
+	return &userv1.LoginData{
+		Token:  token,
+		UserId: user.ID,
 	}, nil
 }
 
-func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterReply, error) {
+func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterData, error) {
 	slog.InfoContext(ctx, "Received Register request", "username", req.Username)
 
 	username := strings.TrimSpace(req.Username)
 	if username == "" || req.Password == "" {
-		return nil, status.Error(codes.InvalidArgument, "username and password required")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "用户名和密码不能为空")
 	}
 
 	routingKey := "sys:user:" + username
@@ -190,7 +190,7 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		slog.ErrorContext(ctx, "bcrypt hash failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal server error")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	err = queries.CreateUser(ctx, sqlc.CreateUserParams{
@@ -200,16 +200,16 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-			return nil, status.Error(codes.AlreadyExists, "username already exists")
+			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "用户名已存在")
 		}
 		slog.ErrorContext(ctx, "CreateUser failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal server error")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	user, err := queries.GetUserByUsername(ctx, username)
 	if err != nil {
 		slog.ErrorContext(ctx, "GetUserByUsername after register failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal server error")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	token, _, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
@@ -219,27 +219,26 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 
 	slog.InfoContext(ctx, "User registered successfully", "username", user.Username)
 
-	return &userv1.RegisterReply{
-		Success: true,
-		Token:   token,
-		UserId:  user.ID,
+	return &userv1.RegisterData{
+		Token:  token,
+		UserId: user.ID,
 	}, nil
 }
 
-func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenReply, error) {
+func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenData, error) {
 	slog.InfoContext(ctx, "Received VerifyToken request")
 
 	// Get user_id from context (injected by gateway)
 	userIDVal := ctx.Value("user_id")
 	if userIDVal == nil {
 		slog.ErrorContext(ctx, "No user_id in context")
-		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
 	userID, ok := userIDVal.(int64)
 	if !ok {
 		slog.ErrorContext(ctx, "Invalid user_id type in context")
-		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
 	routingKey := "sys:user:id:" + fmt.Sprintf("%d", userID)
@@ -253,19 +252,16 @@ func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRe
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			slog.ErrorContext(ctx, "User not found", "user_id", userID)
-			return nil, status.Error(codes.Unauthenticated, "user not found")
+			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_FOUND), "用户不存在")
 		}
 		slog.ErrorContext(ctx, "GetUserByID failed", "error", err)
-		return nil, status.Error(codes.Internal, "internal server error")
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	slog.InfoContext(ctx, "Token verified successfully", "user_id", userID, "username", user.Username)
 
-	return &userv1.VerifyTokenReply{
-		Success: true,
-		Data: &userv1.VerifyTokenData{
-			UserId:   user.ID,
-			Username: user.Username,
-		},
+	return &userv1.VerifyTokenData{
+		UserId:   user.ID,
+		Username: user.Username,
 	}, nil
 }

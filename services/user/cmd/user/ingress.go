@@ -14,9 +14,9 @@ import (
 
 // userLoginRegister 便于 Ingress 与单测 mock 共用。
 type userLoginRegister interface {
-	Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginReply, error)
-	Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterReply, error)
-	VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenReply, error)
+	Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.LoginData, error)
+	Register(ctx context.Context, req *userv1.RegisterRequest) (*userv1.RegisterData, error)
+	VerifyToken(ctx context.Context, req *userv1.VerifyTokenRequest) (*userv1.VerifyTokenData, error)
 }
 
 type ingressServer struct {
