@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/CBookShu/kd48/api/proto/common/v1;commonv1";
+
+import "google/protobuf/any.proto";
+
+// ApiResponse 通用响应外壳（所有服务共用）
+message ApiResponse {
+  int32 code = 1;
+  string message = 2;
+  google.protobuf.Any data = 3;
+  map<string, string> meta = 4;
+}
+
+// ErrorCode 错误码定义（所有服务共用）
+// 规则：每个模块预分配 1000 个码
+enum ErrorCode {
+  SUCCESS = 0;
+
+  // 系统错误 1000-1999
+  INVALID_REQUEST = 1000;
+  INTERNAL_ERROR = 1001;
+  SERVICE_UNAVAILABLE = 1002;
+
+  // 用户相关 2000-2999
+  USER_NOT_FOUND = 2000;
+  USER_NOT_AUTHENTICATED = 2001;
+
+  // 签到相关 3000-3999
+  CHECKIN_ALREADY_TODAY = 3000;
+  CHECKIN_PERIOD_NOT_ACTIVE = 3001;
+  CHECKIN_PERIOD_EXPIRED = 3002;
+
+  // 物品相关 4000-4999
+  ITEM_NOT_FOUND = 4000;
+  ITEM_INSUFFICIENT = 4001;
+}
