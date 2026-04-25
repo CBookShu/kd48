@@ -83,6 +83,7 @@ func (g *Gateway) Send(ctx context.Context, method string, payload interface{}) 
 	}
 
 	// 发送
+	g.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
 	if err := g.conn.WriteJSON(req); err != nil {
 		return nil, fmt.Errorf("发送请求失败: %v", err)
 	}
@@ -98,6 +99,8 @@ func (g *Gateway) Send(ctx context.Context, method string, payload interface{}) 
 
 // Close 关闭连接
 func (g *Gateway) Close() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.conn != nil {
 		return g.conn.Close()
 	}
