@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -166,7 +167,7 @@ func (h *Handler) userLogin(args []string) string {
 		"password": password,
 	}
 
-	resp, err := h.gateway.Send(nil, "/user.v1.UserService/Login", payload)
+	resp, err := h.gateway.Send(context.Background(), "/user.v1.UserService/Login", payload)
 	if err != nil {
 		return fmt.Sprintf("[错误] %v", err)
 	}
@@ -206,7 +207,7 @@ func (h *Handler) userRegister(args []string) string {
 		"password": password,
 	}
 
-	resp, err := h.gateway.Send(nil, "/user.v1.UserService/Register", payload)
+	resp, err := h.gateway.Send(context.Background(), "/user.v1.UserService/Register", payload)
 	if err != nil {
 		return fmt.Sprintf("[错误] %v", err)
 	}
@@ -269,11 +270,8 @@ func (h *Handler) checkinDo() string {
 		return "[错误] 请先登录"
 	}
 
-	// 注意：Gateway 已经通过 WebSocket 连接认证，
-	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
-	payload := map[string]string{}
-
-	resp, err := h.gateway.Send(nil, "/lobby.v1.CheckinService/Checkin", payload)
+	// user_id 由 Gateway 通过 WebSocket 连接认证
+	resp, err := h.gateway.Send(context.Background(), "/lobby.v1.CheckinService/Checkin", nil)
 	if err != nil {
 		return fmt.Sprintf("[错误] %v", err)
 	}
@@ -302,11 +300,8 @@ func (h *Handler) checkinStatus() string {
 		return "[错误] 请先登录"
 	}
 
-	// 注意：Gateway 已经通过 WebSocket 连接认证，
-	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
-	payload := map[string]string{}
-
-	resp, err := h.gateway.Send(nil, "/lobby.v1.CheckinService/GetStatus", payload)
+	// user_id 由 Gateway 通过 WebSocket 连接认证
+	resp, err := h.gateway.Send(context.Background(), "/lobby.v1.CheckinService/GetStatus", nil)
 	if err != nil {
 		return fmt.Sprintf("[错误] %v", err)
 	}
@@ -351,11 +346,8 @@ func (h *Handler) items() string {
 		return "[错误] 请先登录"
 	}
 
-	// 注意：Gateway 已经通过 WebSocket 连接认证，
-	// user_id 会通过 context 传递给后端服务，无需在 payload 中发送 token
-	payload := map[string]string{}
-
-	resp, err := h.gateway.Send(nil, "/lobby.v1.ItemService/GetMyItems", payload)
+	// user_id 由 Gateway 通过 WebSocket 连接认证
+	resp, err := h.gateway.Send(context.Background(), "/lobby.v1.ItemService/GetMyItems", nil)
 	if err != nil {
 		return fmt.Sprintf("[错误] %v", err)
 	}
