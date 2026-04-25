@@ -43,10 +43,8 @@ type userRegisterResp struct {
 	UserID  int64String `json:"userId"`
 }
 
-// checkinDoResp 签到响应
-type checkinDoResp struct {
-	Success bool `json:"success"`
-}
+// checkinDoResp 签到响应（空结构，响应通过 Code 判断）
+type checkinDoResp struct{}
 
 // checkinStatusResp 签到状态响应
 type checkinStatusResp struct {
@@ -60,8 +58,7 @@ type checkinStatusResp struct {
 
 // itemsResp 物品响应
 type itemsResp struct {
-	Success bool   `json:"success"`
-	Items   string `json:"items"` // JSON string of map[int32]int64
+	Items string `json:"items"` // JSON string of map[int32]int64
 }
 
 // Handler 命令处理器
@@ -292,10 +289,6 @@ func (h *Handler) checkinDo() string {
 		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
 	}
 
-	if !checkinResp.Success {
-		return "[错误] 签到失败"
-	}
-
 	// 更新状态
 	h.state.TodayChecked = true
 	h.state.ContinuousDays++
@@ -376,10 +369,6 @@ func (h *Handler) items() string {
 	var itemsResp itemsResp
 	if err := json.Unmarshal(data, &itemsResp); err != nil {
 		return fmt.Sprintf("[错误] 解析响应失败: %v", err)
-	}
-
-	if !itemsResp.Success {
-		return "[错误] 获取物品失败"
 	}
 
 	// 解析 items JSON
