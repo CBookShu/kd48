@@ -205,7 +205,7 @@ func TestIngressServer_Call_Login_Success(t *testing.T) {
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
 	assert.Equal(t, "test-token", got["token"])
-	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
+	assert.Equal(t, float64(123), got["user_id"]) // protojson serializes uint32 as number (snake_case)
 }
 
 func TestIngressServer_Call_Login_Unauthenticated(t *testing.T) {
@@ -255,7 +255,7 @@ func TestIngressServer_Call_Register_Success(t *testing.T) {
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
 	assert.Equal(t, "test-token", got["token"])
-	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
+	assert.Equal(t, float64(123), got["user_id"]) // protojson serializes uint32 as number (snake_case)
 }
 
 func TestIngressServer_Call_Register_AlreadyExists(t *testing.T) {
@@ -330,7 +330,7 @@ func TestIngressServer_Call_VerifyToken_Success_FromRedis(t *testing.T) {
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(reply.GetJsonPayload(), &got))
 	assert.Equal(t, "testuser", got["username"])
-	assert.Equal(t, "123", got["userId"]) // protojson serializes uint64 as string
+	assert.Equal(t, float64(123), got["user_id"]) // protojson serializes uint32 as number (snake_case)
 }
 
 func TestIngressServer_Call_VerifyToken_MissingToken(t *testing.T) {
