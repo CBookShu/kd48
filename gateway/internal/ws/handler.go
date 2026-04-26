@@ -22,7 +22,7 @@ type clientMeta struct {
 	conn            *websocket.Conn
 	clientID        string // 客户端唯一标识（用于连接管理）
 	isAuthenticated bool
-	userID          int64  // 预留：后续强踢、消息路由使用
+	userID          uint32  // 预留：后续强踢、消息路由使用
 	token           string // 预留：后续强踢、会话恢复使用
 }
 
@@ -172,14 +172,14 @@ func (h *Handler) ServeWS(conn *websocket.Conn) {
 		if route.EstablishSession {
 			meta.isAuthenticated = true
 
-			// 从响应数据中提取 user_id
-			userID := extractUserIDFromResponse(data)
-			if userID > 0 {
-				meta.userID = userID
-				if h.connManager != nil {
-					h.connManager.RegisterUserConnection(userID, clientID)
-					slog.InfoContext(ctx, "User connection registered",
-						"user_id", userID, "client_id", clientID)
+			if dataMap, ok := data.(map[string]interface{}); ok {
+				if userID := extractUint32(dataMap["user_id"]); userID > 0 {
+					meta.userID = userID
+					if h.connManager != nil {
+						h.connManager.RegisterUserConnection(userID, clientID)
+						slog.InfoContext(ctx, "User connection registered",
+							"user_id", userID, "client_id", clientID)
+					}
 				}
 			}
 		}
@@ -208,54 +208,15 @@ func (h *Handler) sendResp(ctx context.Context, conn *websocket.Conn, method str
 // 注意：需要保留一个空引入，让编译器知道我们用到了标准库的 StatusCodes
 var _ = http.StatusOK
 
-// extractUserIDFromResponse 从响应数据中提取 user_id 字段
-// 支持两种格式：
-// 1. 顶层 user_id: {"user_id": 123} (Login/Register)
-// 2. 嵌套 data.user_id: {"data": {"user_id": 123}} (VerifyToken)
-// JSON unmarshaling 默认将数字解析为 float64，需要处理多种数值类型
-func extractUserIDFromResponse(data interface{}) int64 {
-	if data == nil {
-		return 0
-	}
-
-	m, ok := data.(map[string]interface{})
-	if !ok {
-		return 0
-	}
-
-	// 先检查顶层 user_id (Login/Register 响应格式)
-	userIDVal, exists := m["user_id"]
-	if !exists {
-		// 再检查 data 嵌套字段 (VerifyToken 响应格式)
-		dataVal, hasData := m["data"]
-		if hasData {
-			dataMap, ok := dataVal.(map[string]interface{})
-			if ok {
-				userIDVal, exists = dataMap["user_id"]
-			}
-		}
-	}
-
-	if !exists || userIDVal == nil {
-		return 0
-	}
-
-	switch v := userIDVal.(type) {
+// extractUint32 从 interface{} 中提取 uint32
+func extractUint32(v interface{}) uint32 {
+	switch val := v.(type) {
 	case float64:
-		// JSON unmarshal 默认将数字解析为 float64
-		return int64(v)
+		return uint32(val)
 	case int:
-		return int64(v)
-	case int64:
-		return v
-	case uint64:
-		return int64(v)
-	case int32:
-		return int64(v)
+		return uint32(val)
 	case uint32:
-		return int64(v)
-	case float32:
-		return int64(v)
+		return val
 	default:
 		return 0
 	}
