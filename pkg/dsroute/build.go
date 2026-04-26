@@ -43,10 +43,11 @@ func NewRouterFromConfig(
 	cfg *DataSourcesConfig,
 	mysqlPools map[string]*sql.DB,
 	redisPools map[string]redis.UniversalClient,
+	serviceName string,
 ) (*Router, error) {
 	if err := ValidateConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
 
-	return NewRouter(mysqlPools, redisPools, cfg.MySQLRoutes, cfg.RedisRoutes)
+	return NewRouter(mysqlPools, redisPools, cfg.MySQLRoutes, cfg.RedisRoutes, serviceName)
 }

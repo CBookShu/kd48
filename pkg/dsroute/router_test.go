@@ -23,7 +23,7 @@ func TestNewRouter_MySQLPoolNotFound(t *testing.T) {
 		{Prefix: "session:", Pool: "cache"},
 	}
 
-	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err == nil {
 		t.Error("expected error for unknown pool, got nil")
 	}
@@ -43,7 +43,7 @@ func TestNewRouter_RedisPoolNotFound(t *testing.T) {
 		{Prefix: "session:", Pool: "unknown"},
 	}
 
-	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err == nil {
 		t.Error("expected error for unknown pool, got nil")
 	}
@@ -61,7 +61,7 @@ func TestNewRouter_DuplicateMySQLPrefix(t *testing.T) {
 	}
 	redisRoutes := []RouteRule{}
 
-	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err == nil {
 		t.Error("expected error for duplicate prefix, got nil")
 	}
@@ -79,7 +79,7 @@ func TestNewRouter_DuplicateRedisPrefix(t *testing.T) {
 		{Prefix: "session:", Pool: "temp"},
 	}
 
-	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	_, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err == nil {
 		t.Error("expected error for duplicate prefix, got nil")
 	}
@@ -100,7 +100,7 @@ func TestNewRouter_Success(t *testing.T) {
 		{Prefix: "session:", Pool: "cache"},
 	}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestRouter_ResolveDB_Success(t *testing.T) {
 	}
 	redisRoutes := []RouteRule{}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestRouter_ResolveDB_NoMatch(t *testing.T) {
 	}
 	redisRoutes := []RouteRule{}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestRouter_ResolveRedis_Success(t *testing.T) {
 		{Prefix: "", Pool: "cache"},
 	}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestRouter_ResolveRedis_NoMatch(t *testing.T) {
 		{Prefix: "temp:", Pool: "cache"},
 	}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestRouter_ResolveDB_LongestPrefix(t *testing.T) {
 	}
 	redisRoutes := []RouteRule{}
 
-	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "test")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
