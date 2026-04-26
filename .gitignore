@@ -10,10 +10,14 @@ run.pid
 
 # 编译产物
 /user
+/kd48-cli
 
 # Lobby service binary
 /lobby
 lobby.bin
+
+# Gateway binary
+gateway/cmd/gateway/gateway
 
 # Superpowers worktrees
 .worktrees/
