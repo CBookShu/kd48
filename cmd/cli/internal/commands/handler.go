@@ -11,35 +11,16 @@ import (
 	"github.com/CBookShu/kd48/cli/internal/state"
 )
 
-// int64String 可以解析 JSON 中的数字或字符串形式的 int64
-type int64String int64
-
-func (i *int64String) UnmarshalJSON(data []byte) error {
-	// 去掉首尾空格
-	s := strings.TrimSpace(string(data))
-	// 去掉引号（如果是字符串）
-	s = strings.Trim(s, `"`)
-	// 解析
-	n, err := fmt.Sscanf(s, "%d", (*int64)(i))
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return fmt.Errorf("cannot parse %s as int64", data)
-	}
-	return nil
-}
-
 // userLoginResp 登录响应
 type userLoginResp struct {
-	Token  string      `json:"token"`
-	UserID int64String `json:"userId"`
+	Token  string `json:"token"`
+	UserID uint32 `json:"user_id"`
 }
 
 // userRegisterResp 注册响应
 type userRegisterResp struct {
-	Token  string      `json:"token"`
-	UserID int64String `json:"userId"`
+	Token  string `json:"token"`
+	UserID uint32 `json:"user_id"`
 }
 
 // checkinDoResp 签到响应（空结构，响应通过 Code 判断）
