@@ -76,7 +76,7 @@ func (x *LoginRequest) GetPassword() string {
 type LoginData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	UserId        uint64                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        uint32                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -118,7 +118,7 @@ func (x *LoginData) GetToken() string {
 	return ""
 }
 
-func (x *LoginData) GetUserId() uint64 {
+func (x *LoginData) GetUserId() uint32 {
 	if x != nil {
 		return x.UserId
 	}
@@ -180,7 +180,7 @@ func (x *RegisterRequest) GetPassword() string {
 type RegisterData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	UserId        uint64                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        uint32                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -222,7 +222,7 @@ func (x *RegisterData) GetToken() string {
 	return ""
 }
 
-func (x *RegisterData) GetUserId() uint64 {
+func (x *RegisterData) GetUserId() uint32 {
 	if x != nil {
 		return x.UserId
 	}
@@ -275,7 +275,7 @@ func (x *VerifyTokenRequest) GetToken() string {
 
 type VerifyTokenData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        uint64                 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        uint32                 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -311,7 +311,7 @@ func (*VerifyTokenData) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *VerifyTokenData) GetUserId() uint64 {
+func (x *VerifyTokenData) GetUserId() uint32 {
 	if x != nil {
 		return x.UserId
 	}
@@ -335,17 +335,17 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\":\n" +
 	"\tLoginData\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\x04R\x06userId\"I\n" +
+	"\auser_id\x18\x02 \x01(\rR\x06userId\"I\n" +
 	"\x0fRegisterRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"=\n" +
 	"\fRegisterData\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\x04R\x06userId\"*\n" +
+	"\auser_id\x18\x02 \x01(\rR\x06userId\"*\n" +
 	"\x12VerifyTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"F\n" +
 	"\x0fVerifyTokenData\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\x04R\x06userId\x12\x1a\n" +
+	"\auser_id\x18\x01 \x01(\rR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername2\xc4\x01\n" +
 	"\vUserService\x122\n" +
 	"\x05Login\x12\x15.user.v1.LoginRequest\x1a\x12.user.v1.LoginData\x12;\n" +

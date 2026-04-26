@@ -21,7 +21,7 @@ message LoginRequest {
 
 message LoginData {
   string token = 1;
-  uint64 user_id = 2;
+  uint32 user_id = 2;
 }
 
 message RegisterRequest {
@@ -31,7 +31,7 @@ message RegisterRequest {
 
 message RegisterData {
   string token = 1;
-  uint64 user_id = 2;
+  uint32 user_id = 2;
 }
 
 message VerifyTokenRequest {
@@ -39,6 +39,6 @@ message VerifyTokenRequest {
 }
 
 message VerifyTokenData {
-  uint64 user_id = 1;
+  uint32 user_id = 1;
   string username = 2;
 }
