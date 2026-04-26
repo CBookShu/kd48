@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestItemService_GetMyItems_Success(t *testing.T) {
 	svc, mr := setupItemTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
+	ctx := contextkey.WithUserID(context.Background(), uint32(12345))
 
 	// 设置测试数据
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -63,7 +64,7 @@ func TestItemService_GetMyItems_EmptyInventory(t *testing.T) {
 	svc, mr := setupItemTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
+	ctx := contextkey.WithUserID(context.Background(), uint32(12345))
 
 	data, err := svc.GetMyItems(ctx, &lobbyv1.GetMyItemsRequest{})
 
@@ -78,11 +79,11 @@ func TestItemService_GetMyItems_DifferentUsers(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
 	// 用户1的数据
-	ctx1 := context.WithValue(context.Background(), "user_id", uint32(111))
+	ctx1 := contextkey.WithUserID(context.Background(), uint32(111))
 	rdb.HSet(ctx1, "kd48:user_items:111", "1001", "100")
 
 	// 用户2的数据
-	ctx2 := context.WithValue(context.Background(), "user_id", uint32(222))
+	ctx2 := contextkey.WithUserID(context.Background(), uint32(222))
 	rdb.HSet(ctx2, "kd48:user_items:222", "1001", "200")
 
 	// 用户1查询
@@ -100,7 +101,7 @@ func TestItemService_GetMyItems_LargeNumbers(t *testing.T) {
 	svc, mr := setupItemTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
+	ctx := contextkey.WithUserID(context.Background(), uint32(12345))
 
 	// 设置大数值物品
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -116,7 +117,7 @@ func TestItemService_GetMyItems_ManyItems(t *testing.T) {
 	svc, mr := setupItemTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
+	ctx := contextkey.WithUserID(context.Background(), uint32(12345))
 
 	// 设置大量物品
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
