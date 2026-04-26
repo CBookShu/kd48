@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"strconv"
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -42,6 +44,13 @@ func newIngressServer(lobbySvc lobbyPing, checkinSvc checkinService, itemSvc ite
 }
 
 func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest) (*gatewayv1.IngressReply, error) {
+	// 从 baggage 中提取 user_id 并注入到 context
+	if userIDStr, ok := req.GetBaggage()["user_id"]; ok {
+		if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
+			ctx = contextkey.WithUserID(ctx, uint32(userID))
+		}
+	}
+
 	switch req.GetRoute() {
 	case "/lobby.v1.LobbyService/Ping":
 		if s.lobbySvc == nil {

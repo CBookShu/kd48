@@ -8,6 +8,7 @@ import (
 
 	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/CBookShu/kd48/services/lobby/internal/checkin"
 	"github.com/CBookShu/kd48/services/lobby/internal/item"
 	"github.com/redis/go-redis/v9"
@@ -56,7 +57,7 @@ func (s *CheckinService) SetContinuousRewards(rewards map[int]map[int32]int64) {
 
 // Checkin 签到
 func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
-	userID, ok := ctx.Value("user_id").(uint32)
+	userID, ok := contextkey.GetUserID(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
@@ -128,7 +129,7 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 
 // GetStatus 获取签到状态
 func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.CheckinStatusData, error) {
-	userID, ok := ctx.Value("user_id").(uint32)
+	userID, ok := contextkey.GetUserID(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}

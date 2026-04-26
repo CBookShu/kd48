@@ -6,6 +6,7 @@ import (
 
 	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/CBookShu/kd48/services/lobby/internal/item"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
@@ -28,7 +29,7 @@ func NewItemService(rdb *redis.Client) *ItemService {
 // GetMyItems 获取我的物品
 func (s *ItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.MyItemsData, error) {
 	// 从 context 获取 user_id（由 Gateway 注入）
-	userID, ok := ctx.Value("user_id").(uint32)
+	userID, ok := contextkey.GetUserID(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
