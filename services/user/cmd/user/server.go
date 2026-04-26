@@ -60,7 +60,7 @@ func (s *userService) getQueries(ctx context.Context, routingKey string) (*sqlc.
 	return sqlc.New(db), nil
 }
 
-func (s *userService) issueSession(ctx context.Context, userID uint64, username string) (string, error) {
+func (s *userService) issueSession(ctx context.Context, userID uint32, username string) (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		slog.ErrorContext(ctx, "Failed to generate token", "error", err)
@@ -85,7 +85,7 @@ func (s *userService) issueSession(ctx context.Context, userID uint64, username 
 
 // issueSessionAtomic 原子化创建 Session（使用 Lua 脚本）
 // 返回新 token 和是否有旧 token（用于发布 Pub/Sub）
-func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, username string) (string, bool, error) {
+func (s *userService) issueSessionAtomic(ctx context.Context, userID uint32, username string) (string, bool, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		slog.ErrorContext(ctx, "Failed to generate token", "error", err)
@@ -119,7 +119,7 @@ func (s *userService) issueSessionAtomic(ctx context.Context, userID uint64, use
 }
 
 // publishSessionInvalidate 发布 Session 失效通知
-func (s *userService) publishSessionInvalidate(ctx context.Context, userID uint64) {
+func (s *userService) publishSessionInvalidate(ctx context.Context, userID uint32) {
 	rdb, _, err := s.router.ResolveRedis(ctx, routingKeySession)
 	if err != nil {
 		slog.WarnContext(ctx, "Failed to resolve redis for publish", "error", err)
@@ -155,20 +155,20 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户名或密码错误")
 	}
 
-	token, hasOldToken, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
+	token, hasOldToken, err := s.issueSessionAtomic(ctx, uint32(user.ID), user.Username)
 	if err != nil {
 		return nil, err
 	}
 
 	if hasOldToken {
-		s.publishSessionInvalidate(ctx, user.ID)
+		s.publishSessionInvalidate(ctx, uint32(user.ID))
 	}
 
 	slog.InfoContext(ctx, "User logged in successfully", "username", user.Username)
 
 	return &userv1.LoginData{
 		Token:  token,
-		UserId: user.ID,
+		UserId: uint32(user.ID),
 	}, nil
 }
 
@@ -212,7 +212,7 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
-	token, _, err := s.issueSessionAtomic(ctx, user.ID, user.Username)
+	token, _, err := s.issueSessionAtomic(ctx, uint32(user.ID), user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 
 	return &userv1.RegisterData{
 		Token:  token,
-		UserId: user.ID,
+		UserId: uint32(user.ID),
 	}, nil
 }
 
@@ -235,7 +235,7 @@ func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRe
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
-	userID, ok := userIDVal.(int64)
+	userID, ok := userIDVal.(uint32)
 	if !ok {
 		slog.ErrorContext(ctx, "Invalid user_id type in context")
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
@@ -261,7 +261,7 @@ func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRe
 	slog.InfoContext(ctx, "Token verified successfully", "user_id", userID, "username", user.Username)
 
 	return &userv1.VerifyTokenData{
-		UserId:   user.ID,
+		UserId:   uint32(user.ID),
 		Username: user.Username,
 	}, nil
 }
