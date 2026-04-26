@@ -20,12 +20,12 @@ func NewItemStore(rdb *redis.Client) *ItemStore {
 }
 
 // redisKey 生成 Redis key
-func redisKey(userID int64) string {
+func redisKey(userID uint32) string {
 	return fmt.Sprintf("kd48:user_items:%d", userID)
 }
 
 // GetItems 获取用户所有物品
-func (s *ItemStore) GetItems(ctx context.Context, userID int64) (map[int32]int64, error) {
+func (s *ItemStore) GetItems(ctx context.Context, userID uint32) (map[int32]int64, error) {
 	key := redisKey(userID)
 	result, err := s.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *ItemStore) GetItems(ctx context.Context, userID int64) (map[int32]int64
 }
 
 // AddItem 添加物品（返回新数量）
-func (s *ItemStore) AddItem(ctx context.Context, userID int64, itemID int32, count int64) error {
+func (s *ItemStore) AddItem(ctx context.Context, userID uint32, itemID int32, count int64) error {
 	key := redisKey(userID)
 	field := fmt.Sprintf("%d", itemID)
 
@@ -62,7 +62,7 @@ func (s *ItemStore) AddItem(ctx context.Context, userID int64, itemID int32, cou
 }
 
 // SetItem 设置物品数量
-func (s *ItemStore) SetItem(ctx context.Context, userID int64, itemID int32, count int64) error {
+func (s *ItemStore) SetItem(ctx context.Context, userID uint32, itemID int32, count int64) error {
 	key := redisKey(userID)
 	field := fmt.Sprintf("%d", itemID)
 

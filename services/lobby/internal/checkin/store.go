@@ -29,12 +29,12 @@ func NewCheckinStore(rdb *redis.Client) *CheckinStore {
 }
 
 // redisKey 生成 Redis key
-func redisKey(userID int64) string {
+func redisKey(userID uint32) string {
 	return fmt.Sprintf("kd48:checkin:%d", userID)
 }
 
 // GetStatus 获取用户签到状态
-func (s *CheckinStore) GetStatus(ctx context.Context, userID int64) (*UserCheckinStatus, error) {
+func (s *CheckinStore) GetStatus(ctx context.Context, userID uint32) (*UserCheckinStatus, error) {
 	key := redisKey(userID)
 	data, err := s.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -59,7 +59,7 @@ func (s *CheckinStore) GetStatus(ctx context.Context, userID int64) (*UserChecki
 }
 
 // UpdateStatus 更新用户签到状态
-func (s *CheckinStore) UpdateStatus(ctx context.Context, userID int64, status *UserCheckinStatus) error {
+func (s *CheckinStore) UpdateStatus(ctx context.Context, userID uint32, status *UserCheckinStatus) error {
 	key := redisKey(userID)
 	data, err := json.Marshal(status)
 	if err != nil {
@@ -76,7 +76,7 @@ func (s *CheckinStore) UpdateStatus(ctx context.Context, userID int64, status *U
 }
 
 // ResetStatus 重置签到状态（新期开始）
-func (s *CheckinStore) ResetStatus(ctx context.Context, userID int64, periodID int64) error {
+func (s *CheckinStore) ResetStatus(ctx context.Context, userID uint32, periodID int64) error {
 	status := &UserCheckinStatus{
 		PeriodID:        periodID,
 		LastCheckinDate: "",

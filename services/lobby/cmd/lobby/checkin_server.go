@@ -56,7 +56,7 @@ func (s *CheckinService) SetContinuousRewards(rewards map[int]map[int32]int64) {
 
 // Checkin 签到
 func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
-	userID, ok := ctx.Value("user_id").(int64)
+	userID, ok := ctx.Value("user_id").(uint32)
 	if !ok {
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
@@ -128,7 +128,7 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 
 // GetStatus 获取签到状态
 func (s *CheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStatusRequest) (*lobbyv1.CheckinStatusData, error) {
-	userID, ok := ctx.Value("user_id").(int64)
+	userID, ok := ctx.Value("user_id").(uint32)
 	if !ok {
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}

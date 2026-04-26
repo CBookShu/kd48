@@ -31,7 +31,7 @@ type mockCheckinService struct {
 	getStatusCalled bool
 	checkinErr      error
 	getStatusErr    error
-	lastUserID      int64
+	lastUserID      uint32
 }
 
 func (m *mockCheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
@@ -40,7 +40,7 @@ func (m *mockCheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRe
 		return nil, m.checkinErr
 	}
 	// 提取 user_id 用于验证
-	if userID, ok := ctx.Value("user_id").(int64); ok {
+	if userID, ok := ctx.Value("user_id").(uint32); ok {
 		m.lastUserID = userID
 	}
 	return &lobbyv1.CheckinData{
@@ -54,7 +54,7 @@ func (m *mockCheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStat
 	if m.getStatusErr != nil {
 		return nil, m.getStatusErr
 	}
-	if userID, ok := ctx.Value("user_id").(int64); ok {
+	if userID, ok := ctx.Value("user_id").(uint32); ok {
 		m.lastUserID = userID
 	}
 	return &lobbyv1.CheckinStatusData{
@@ -67,7 +67,7 @@ func (m *mockCheckinService) GetStatus(ctx context.Context, req *lobbyv1.GetStat
 type mockItemService struct {
 	getMyItemsCalled bool
 	getMyItemsErr    error
-	lastUserID       int64
+	lastUserID       uint32
 }
 
 func (m *mockItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItemsRequest) (*lobbyv1.MyItemsData, error) {
@@ -75,7 +75,7 @@ func (m *mockItemService) GetMyItems(ctx context.Context, req *lobbyv1.GetMyItem
 	if m.getMyItemsErr != nil {
 		return nil, m.getMyItemsErr
 	}
-	if userID, ok := ctx.Value("user_id").(int64); ok {
+	if userID, ok := ctx.Value("user_id").(uint32); ok {
 		m.lastUserID = userID
 	}
 	return &lobbyv1.MyItemsData{
@@ -104,7 +104,7 @@ func TestIngressServer_Call_Checkin(t *testing.T) {
 	mockCheckin := &mockCheckinService{}
 	ingress := newIngressServer(nil, mockCheckin, nil)
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	req := &gatewayv1.IngressRequest{
 		Route:       "/lobby.v1.CheckinService/Checkin",
 		JsonPayload: []byte(`{}`),
@@ -113,7 +113,7 @@ func TestIngressServer_Call_Checkin(t *testing.T) {
 	reply, err := ingress.Call(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, mockCheckin.checkinCalled)
-	assert.Equal(t, int64(12345), mockCheckin.lastUserID)
+	assert.Equal(t, uint32(12345), mockCheckin.lastUserID)
 	assert.NotNil(t, reply.JsonPayload)
 }
 
@@ -121,7 +121,7 @@ func TestIngressServer_Call_GetStatus(t *testing.T) {
 	mockCheckin := &mockCheckinService{}
 	ingress := newIngressServer(nil, mockCheckin, nil)
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	req := &gatewayv1.IngressRequest{
 		Route:       "/lobby.v1.CheckinService/GetStatus",
 		JsonPayload: []byte(`{}`),
@@ -130,7 +130,7 @@ func TestIngressServer_Call_GetStatus(t *testing.T) {
 	reply, err := ingress.Call(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, mockCheckin.getStatusCalled)
-	assert.Equal(t, int64(12345), mockCheckin.lastUserID)
+	assert.Equal(t, uint32(12345), mockCheckin.lastUserID)
 	assert.NotNil(t, reply.JsonPayload)
 }
 
@@ -138,7 +138,7 @@ func TestIngressServer_Call_GetMyItems(t *testing.T) {
 	mockItem := &mockItemService{}
 	ingress := newIngressServer(nil, nil, mockItem)
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	req := &gatewayv1.IngressRequest{
 		Route:       "/lobby.v1.ItemService/GetMyItems",
 		JsonPayload: []byte(`{}`),
@@ -147,7 +147,7 @@ func TestIngressServer_Call_GetMyItems(t *testing.T) {
 	reply, err := ingress.Call(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, mockItem.getMyItemsCalled)
-	assert.Equal(t, int64(12345), mockItem.lastUserID)
+	assert.Equal(t, uint32(12345), mockItem.lastUserID)
 	assert.NotNil(t, reply.JsonPayload)
 }
 

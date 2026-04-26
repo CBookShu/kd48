@@ -53,7 +53,7 @@ func TestCheckinService_GetStatus_Success(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	data, err := svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestCheckinService_GetStatus_NoActivePeriod(t *testing.T) {
 	svc := NewCheckinService(rdb)
 	// 不设置 period
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	_, err = svc.GetStatus(ctx, &lobbyv1.GetStatusRequest{})
 
 	require.Error(t, err)
@@ -100,7 +100,7 @@ func TestCheckinService_GetStatus_AfterCheckin(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 先签到
 	_, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
@@ -121,7 +121,7 @@ func TestCheckinService_Checkin_Success(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 第一次签到
 	data, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
@@ -135,7 +135,7 @@ func TestCheckinService_Checkin_AlreadyToday(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 第一次签到
 	_, err := svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
@@ -154,11 +154,11 @@ func TestCheckinService_Checkin_ContinuousDays(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 模拟昨天的签到状态
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	svc.checkinStore.UpdateStatus(ctx, 12345, &checkin.UserCheckinStatus{
+	svc.checkinStore.UpdateStatus(ctx, uint32(12345), &checkin.UserCheckinStatus{
 		PeriodID:        1,
 		LastCheckinDate: yesterday,
 		ContinuousDays:  2,
@@ -179,11 +179,11 @@ func TestCheckinService_Checkin_BreakContinuous(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 模拟2天前的签到状态（断签）
 	twoDaysAgo := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
-	svc.checkinStore.UpdateStatus(ctx, 12345, &checkin.UserCheckinStatus{
+	svc.checkinStore.UpdateStatus(ctx, uint32(12345), &checkin.UserCheckinStatus{
 		PeriodID:        1,
 		LastCheckinDate: twoDaysAgo,
 		ContinuousDays:  5,
@@ -223,7 +223,7 @@ func TestCheckinService_Checkin_NoActivePeriod(t *testing.T) {
 	svc := NewCheckinService(rdb)
 	// 不设置 period
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 	_, err = svc.Checkin(ctx, &lobbyv1.CheckinRequest{})
 
 	require.Error(t, err)
@@ -236,10 +236,10 @@ func TestCheckinService_Checkin_NewPeriodReset(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	ctx := context.WithValue(context.Background(), "user_id", int64(12345))
+	ctx := context.WithValue(context.Background(), "user_id", uint32(12345))
 
 	// 模拟旧期的签到状态
-	svc.checkinStore.UpdateStatus(ctx, 12345, &checkin.UserCheckinStatus{
+	svc.checkinStore.UpdateStatus(ctx, uint32(12345), &checkin.UserCheckinStatus{
 		PeriodID:        999, // 旧期
 		LastCheckinDate: time.Now().AddDate(0, 0, -1).Format("2006-01-02"),
 		ContinuousDays:  10,
@@ -261,7 +261,7 @@ func TestCheckinService_Checkin_ItemsAddedToInventory(t *testing.T) {
 	svc, mr := setupCheckinTest(t)
 	defer mr.Close()
 
-	userID := int64(12345)
+	userID := uint32(12345)
 	ctx := context.WithValue(context.Background(), "user_id", userID)
 
 	// 签到
