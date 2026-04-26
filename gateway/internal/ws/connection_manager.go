@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CBookShu/kd48/pkg/metrics"
 	"github.com/gofiber/contrib/websocket"
 )
 
@@ -62,6 +63,9 @@ func (cm *ConnectionManager) RegisterConnection(clientID string, conn *websocket
 	cm.metrics.TotalConnections++
 	cm.metrics.ActiveConnections++
 
+	metrics.WSConnectionsTotal.WithLabelValues().Inc()
+	metrics.WSConnectionsActive.WithLabelValues().Set(float64(cm.metrics.ActiveConnections))
+
 	// 初始化心跳状态
 	cm.heartbeat.RecordPing(clientID)
 
@@ -86,6 +90,8 @@ func (cm *ConnectionManager) UnregisterConnection(clientID string) {
 		if cm.metrics.ActiveConnections < 0 {
 			cm.metrics.ActiveConnections = 0
 		}
+
+		metrics.WSConnectionsActive.WithLabelValues().Set(float64(cm.metrics.ActiveConnections))
 
 		// Also clean up userConnections (find userID by clientID)
 		for uid, cid := range cm.userConnections {

@@ -15,6 +15,7 @@ import (
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
 	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/CBookShu/kd48/pkg/dsroute"
+	"github.com/CBookShu/kd48/pkg/metrics"
 	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
 	"github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
@@ -140,24 +141,29 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 
 	queries, err := s.getQueries(ctx, routingKey)
 	if err != nil {
+		metrics.AuthLoginTotal.WithLabelValues("failure").Inc()
 		return nil, err
 	}
 
 	user, err := queries.GetUserByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			metrics.AuthLoginTotal.WithLabelValues("failure").Inc()
 			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户名或密码错误")
 		}
 		slog.ErrorContext(ctx, "GetUserByUsername failed", "error", err)
+		metrics.AuthLoginTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		metrics.AuthLoginTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户名或密码错误")
 	}
 
 	token, hasOldToken, err := s.issueSessionAtomic(ctx, uint32(user.ID), user.Username)
 	if err != nil {
+		metrics.AuthLoginTotal.WithLabelValues("failure").Inc()
 		return nil, err
 	}
 
@@ -166,6 +172,7 @@ func (s *userService) Login(ctx context.Context, req *userv1.LoginRequest) (*use
 	}
 
 	slog.InfoContext(ctx, "User logged in successfully", "username", user.Username)
+	metrics.AuthLoginTotal.WithLabelValues("success").Inc()
 
 	return &userv1.LoginData{
 		Token:  token,
@@ -177,20 +184,29 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 	slog.InfoContext(ctx, "Received Register request", "username", req.Username)
 
 	username := strings.TrimSpace(req.Username)
-	if username == "" || req.Password == "" {
-		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "用户名和密码不能为空")
+
+	if len(username) == 0 || len(username) > 32 {
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "用户名长度必须在1-32之间")
+	}
+
+	if len(req.Password) < 6 {
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
+		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "密码长度至少6位")
 	}
 
 	routingKey := "sys:user:" + username
 
 	queries, err := s.getQueries(ctx, routingKey)
 	if err != nil {
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 		return nil, err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		slog.ErrorContext(ctx, "bcrypt hash failed", "error", err)
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
@@ -201,24 +217,29 @@ func (s *userService) Register(ctx context.Context, req *userv1.RegisterRequest)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INVALID_REQUEST), "用户名已存在")
 		}
 		slog.ErrorContext(ctx, "CreateUser failed", "error", err)
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	user, err := queries.GetUserByUsername(ctx, username)
 	if err != nil {
 		slog.ErrorContext(ctx, "GetUserByUsername after register failed", "error", err)
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "内部错误")
 	}
 
 	token, _, err := s.issueSessionAtomic(ctx, uint32(user.ID), user.Username)
 	if err != nil {
+		metrics.AuthRegisterTotal.WithLabelValues("failure").Inc()
 		return nil, err
 	}
 
 	slog.InfoContext(ctx, "User registered successfully", "username", user.Username)
+	metrics.AuthRegisterTotal.WithLabelValues("success").Inc()
 
 	return &userv1.RegisterData{
 		Token:  token,

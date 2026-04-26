@@ -14,11 +14,13 @@ import (
 	"github.com/CBookShu/kd48/gateway/internal/ws"
 	"github.com/CBookShu/kd48/pkg/conf"
 	"github.com/CBookShu/kd48/pkg/logzap"
+	"github.com/CBookShu/kd48/pkg/metrics"
 	"github.com/CBookShu/kd48/pkg/otelkit"
 	"github.com/CBookShu/kd48/pkg/rediskit"
 	"github.com/CBookShu/kd48/pkg/registry"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"go.etcd.io/etcd/client/v3/naming/resolver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
@@ -118,6 +120,12 @@ func main() {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
+
+	app.Get("/metrics", func(c *fiber.Ctx) error {
+		return c.Status(200).SendString("# Metrics endpoint placeholder")
+	})
+
+	app.Use(metrics.FiberMiddleware("gateway"))
 
 	SetupRoutes(app, wsHandler, c.Gateway.StaticDir)
 

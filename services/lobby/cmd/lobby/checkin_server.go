@@ -3,12 +3,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	lobbyv1 "github.com/CBookShu/kd48/api/proto/lobby/v1"
 	"github.com/CBookShu/kd48/pkg/contextkey"
+	"github.com/CBookShu/kd48/pkg/metrics"
 	"github.com/CBookShu/kd48/services/lobby/internal/checkin"
 	"github.com/CBookShu/kd48/services/lobby/internal/item"
 	"github.com/redis/go-redis/v9"
@@ -59,21 +61,22 @@ func (s *CheckinService) SetContinuousRewards(rewards map[int]map[int32]int64) {
 func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinRequest) (*lobbyv1.CheckinData, error) {
 	userID, ok := contextkey.GetUserID(ctx)
 	if !ok {
+		metrics.CheckinTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
 	if s.period == nil {
+		metrics.CheckinTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_CHECKIN_PERIOD_NOT_ACTIVE), "签到期未开启")
 	}
 
-	// 获取用户签到状态
 	checkinStatus, err := s.checkinStore.GetStatus(ctx, userID)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to get checkin status", "user_id", userID, "error", err)
+		metrics.CheckinTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "获取签到状态失败")
 	}
 
-	// 检查是否需要重置（新期开始）
 	if checkinStatus.PeriodID != s.period.PeriodID {
 		checkinStatus = &checkin.UserCheckinStatus{
 			PeriodID:    s.period.PeriodID,
@@ -81,13 +84,12 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 		}
 	}
 
-	// 检查今日是否已签到
 	today := time.Now().Format("2006-01-02")
 	if checkinStatus.LastCheckinDate == today {
+		metrics.CheckinTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_CHECKIN_ALREADY_TODAY), "今日已签到")
 	}
 
-	// 计算连续天数
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	if checkinStatus.LastCheckinDate == yesterday {
 		checkinStatus.ContinuousDays++
@@ -95,31 +97,32 @@ func (s *CheckinService) Checkin(ctx context.Context, req *lobbyv1.CheckinReques
 		checkinStatus.ContinuousDays = 1
 	}
 
-	// 计算奖励
 	day := len(checkinStatus.ClaimedDays) + 1
 	rewards := s.calculator.GetDailyReward(day)
 
-	// 检查连续奖励
 	if s.calculator.HasContinuousReward(checkinStatus.ContinuousDays) {
 		continuousReward := s.calculator.GetContinuousReward(checkinStatus.ContinuousDays)
 		rewards = checkin.MergeRewards(rewards, continuousReward)
 	}
 
-	// 发放奖励
 	for itemID, count := range rewards {
 		if err := s.itemStore.AddItem(ctx, userID, itemID, count); err != nil {
 			slog.ErrorContext(ctx, "failed to add items", "user_id", userID, "error", err)
+			metrics.CheckinTotal.WithLabelValues("failure").Inc()
 			return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "发放奖励失败")
 		}
+		metrics.ItemGrantedTotal.WithLabelValues(fmt.Sprintf("%d", itemID)).Add(float64(count))
 	}
 
-	// 更新签到状态
 	checkinStatus.LastCheckinDate = today
 	checkinStatus.ClaimedDays = append(checkinStatus.ClaimedDays, day)
 	if err := s.checkinStore.UpdateStatus(ctx, userID, checkinStatus); err != nil {
 		slog.ErrorContext(ctx, "failed to update checkin status", "user_id", userID, "error", err)
+		metrics.CheckinTotal.WithLabelValues("failure").Inc()
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_INTERNAL_ERROR), "更新签到状态失败")
 	}
+
+	metrics.CheckinTotal.WithLabelValues("success").Inc()
 
 	return &lobbyv1.CheckinData{
 		ContinuousDays: int32(checkinStatus.ContinuousDays),
