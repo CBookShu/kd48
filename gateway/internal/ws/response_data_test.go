@@ -3,6 +3,9 @@ package ws
 import (
 	"testing"
 
+	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -58,4 +61,32 @@ func TestDataFromWsHandlerResult_Empty(t *testing.T) {
 	if err != nil || data != nil {
 		t.Fatalf("want nil,nil got %v, %v", data, err)
 	}
+}
+
+func TestDataFromWsHandlerResult_SnakeCaseUint32(t *testing.T) {
+	// 验证 protojson 输出 snake_case 和数字类型
+	loginData := &userv1.LoginData{
+		Token:  "test-token",
+		UserId: 123,
+	}
+
+	result := &WsHandlerResult{
+		Message: loginData,
+	}
+
+	data, err := DataFromWsHandlerResult(result)
+	require.NoError(t, err)
+
+	dataMap, ok := data.(map[string]interface{})
+	require.True(t, ok, "result should be a map")
+
+	// 验证 snake_case: user_id (不是 userId)
+	assert.Contains(t, dataMap, "user_id", "field should be snake_case: user_id")
+	assert.NotContains(t, dataMap, "userId", "field should NOT be camelCase: userId")
+
+	// 验证数字类型: float64 (JSON unmarshal 将数字解析为 float64)
+	userID, ok := dataMap["user_id"]
+	require.True(t, ok)
+	assert.IsType(t, float64(0), userID, "user_id should be number, not string")
+	assert.Equal(t, float64(123), userID)
 }
