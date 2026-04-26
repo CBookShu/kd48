@@ -15,7 +15,7 @@ import (
 type ConnectionManager struct {
 	heartbeat       *HeartbeatManager
 	connections     map[string]*websocket.Conn // clientID → conn
-	userConnections map[int64]string           // userID → clientID
+	userConnections map[uint32]string           // userID → clientID
 	connMu          sync.RWMutex
 	stopCh          chan struct{}
 	metrics         ConnectionMetrics
@@ -34,7 +34,7 @@ func NewConnectionManager(hbConfig HeartbeatConfig) *ConnectionManager {
 	return &ConnectionManager{
 		heartbeat:       NewHeartbeatManager(hbConfig),
 		connections:     make(map[string]*websocket.Conn),
-		userConnections: make(map[int64]string),
+		userConnections: make(map[uint32]string),
 		stopCh:          make(chan struct{}),
 		metrics:         ConnectionMetrics{},
 	}
@@ -235,7 +235,7 @@ func (cm *ConnectionManager) GetActiveConnectionCount() int {
 }
 
 // RegisterUserConnection 登录成功后关联 userID 与 clientID
-func (cm *ConnectionManager) RegisterUserConnection(userID int64, clientID string) {
+func (cm *ConnectionManager) RegisterUserConnection(userID uint32, clientID string) {
 	cm.connMu.Lock()
 	defer cm.connMu.Unlock()
 	cm.userConnections[userID] = clientID
@@ -243,7 +243,7 @@ func (cm *ConnectionManager) RegisterUserConnection(userID int64, clientID strin
 }
 
 // GetUserClientID 根据 userID 查找 clientID
-func (cm *ConnectionManager) GetUserClientID(userID int64) (string, bool) {
+func (cm *ConnectionManager) GetUserClientID(userID uint32) (string, bool) {
 	cm.connMu.RLock()
 	defer cm.connMu.RUnlock()
 	clientID, exists := cm.userConnections[userID]
@@ -251,7 +251,7 @@ func (cm *ConnectionManager) GetUserClientID(userID int64) (string, bool) {
 }
 
 // DisconnectByUserID 按 userID 断开连接（顶号时调用）
-func (cm *ConnectionManager) DisconnectByUserID(userID int64, reason string) {
+func (cm *ConnectionManager) DisconnectByUserID(userID uint32, reason string) {
 	cm.connMu.Lock()
 	clientID, exists := cm.userConnections[userID]
 	if !exists {

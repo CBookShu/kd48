@@ -66,7 +66,7 @@ func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
 		isAuthenticated: true,
 	}
 
-	var gotUserID int64
+	var gotUserID uint32
 	var ctxChecked bool
 
 	// 创建一个包装器来检查 context
@@ -75,7 +75,7 @@ func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
 		checkCtx: func(ctx context.Context) {
 			ctxChecked = true
 			if v := ctx.Value("user_id"); v != nil {
-				gotUserID = v.(int64)
+				gotUserID = v.(uint32)
 			}
 		},
 	}, "/test")

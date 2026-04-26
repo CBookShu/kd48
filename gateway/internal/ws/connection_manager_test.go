@@ -227,7 +227,7 @@ func TestConnectionManager_RegisterUserConnection(t *testing.T) {
 	})
 
 	clientID := "conn-123"
-	userID := int64(456)
+	userID := uint32(456)
 
 	// 先注册连接
 	cm.RegisterConnection(clientID, nil)
@@ -255,7 +255,7 @@ func TestConnectionManager_RegisterUserConnection_Replace(t *testing.T) {
 	cm.RegisterConnection("conn-1", nil)
 	cm.RegisterConnection("conn-2", nil)
 
-	userID := int64(100)
+	userID := uint32(100)
 
 	// 第一次关联
 	cm.RegisterUserConnection(userID, "conn-1")
@@ -280,7 +280,7 @@ func TestConnectionManager_UnregisterConnection_CleansUserMapping(t *testing.T) 
 	})
 
 	clientID := "conn-123"
-	userID := int64(456)
+	userID := uint32(456)
 
 	cm.RegisterConnection(clientID, nil)
 	cm.RegisterUserConnection(userID, clientID)
@@ -303,7 +303,7 @@ func TestConnectionManager_DisconnectByUserID(t *testing.T) {
 	})
 
 	clientID := "conn-123"
-	userID := int64(456)
+	userID := uint32(456)
 
 	cm.RegisterConnection(clientID, nil)
 	cm.RegisterUserConnection(userID, clientID)
@@ -339,7 +339,7 @@ func TestConnectionManager_DisconnectByUserID_NotExist(t *testing.T) {
 	})
 
 	// 断开不存在的用户（不应出错）
-	cm.DisconnectByUserID(999, "session replaced")
+	cm.DisconnectByUserID(uint32(999), "session replaced")
 
 	metrics := cm.GetMetrics()
 	if metrics.DisconnectedCount != 0 {

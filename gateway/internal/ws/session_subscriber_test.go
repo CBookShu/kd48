@@ -26,7 +26,7 @@ func TestSessionInvalidationSubscriber_ParseMessage(t *testing.T) {
 
 	// 注册一个连接
 	clientID := "conn-123"
-	userID := int64(456)
+	userID := uint32(456)
 	cm.RegisterConnection(clientID, nil)
 	cm.RegisterUserConnection(userID, clientID)
 
@@ -69,7 +69,7 @@ func TestSessionInvalidationSubscriber_InvalidJSON(t *testing.T) {
 	})
 
 	clientID := "conn-123"
-	userID := int64(456)
+	userID := uint32(456)
 	cm.RegisterConnection(clientID, nil)
 	cm.RegisterUserConnection(userID, clientID)
 

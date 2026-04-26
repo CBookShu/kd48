@@ -57,7 +57,7 @@ func (s *SessionInvalidationSubscriber) Start(ctx context.Context) {
 // handleMessage 处理失效消息
 func (s *SessionInvalidationSubscriber) handleMessage(payload string) {
 	var data struct {
-		UserID int64 `json:"user_id"`
+		UserID uint32 `json:"user_id"`
 	}
 
 	if err := json.Unmarshal([]byte(payload), &data); err != nil {
