@@ -6,6 +6,7 @@ import (
 
 	gatewayv1 "github.com/CBookShu/kd48/api/proto/gateway/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -79,8 +80,8 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		}
 
 		// Check if user_id is already in context (from gateway session)
-		userIDVal := ctx.Value("user_id")
-		if userIDVal != nil {
+		_, ok := contextkey.GetUserID(ctx)
+		if ok {
 			// User already authenticated via gateway session
 			out, err := s.inner.VerifyToken(ctx, &userv1.VerifyTokenRequest{})
 			if err != nil {
@@ -124,7 +125,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		}
 
 		// Create context with user_id for the service
-		ctxWithUser := context.WithValue(ctx, "user_id", userID)
+		ctxWithUser := contextkey.WithUserID(ctx, userID)
 		out, err := s.inner.VerifyToken(ctxWithUser, &userv1.VerifyTokenRequest{})
 		if err != nil {
 			return nil, err
