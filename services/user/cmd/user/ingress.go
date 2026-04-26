@@ -29,6 +29,12 @@ func newIngressServer(inner userLoginRegister, rdb redis.UniversalClient) *ingre
 	return &ingressServer{inner: inner, rdb: rdb}
 }
 
+// protojsonMarshaler 配置 protojson 输出 snake_case 字段名
+var protojsonMarshaler = protojson.MarshalOptions{
+	EmitUnpopulated: true,
+	UseProtoNames:   true,
+}
+
 func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest) (*gatewayv1.IngressReply, error) {
 	switch req.GetRoute() {
 	case "/user.v1.UserService/Login":
@@ -43,7 +49,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		if err != nil {
 			return nil, err
 		}
-		b, err := protojson.Marshal(out)
+		b, err := protojsonMarshaler.Marshal(out)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
 		}
@@ -61,7 +67,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		if err != nil {
 			return nil, err
 		}
-		b, err := protojson.Marshal(out)
+		b, err := protojsonMarshaler.Marshal(out)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
 		}
@@ -80,7 +86,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 			if err != nil {
 				return nil, err
 			}
-			b, err := protojson.Marshal(out)
+			b, err := protojsonMarshaler.Marshal(out)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
 			}
@@ -111,7 +117,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		}
 
 		// Parse session value (format: "userID:username")
-		var userID int64
+		var userID uint32
 		var username string
 		if _, err := fmt.Sscanf(sessionValue, "%d:%s", &userID, &username); err != nil {
 			return nil, status.Error(codes.Internal, "invalid session format")
@@ -123,7 +129,7 @@ func (s *ingressServer) Call(ctx context.Context, req *gatewayv1.IngressRequest)
 		if err != nil {
 			return nil, err
 		}
-		b, err := protojson.Marshal(out)
+		b, err := protojsonMarshaler.Marshal(out)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "marshal reply: %v", err)
 		}
