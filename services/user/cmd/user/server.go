@@ -13,6 +13,7 @@ import (
 
 	commonv1 "github.com/CBookShu/kd48/api/proto/common/v1"
 	userv1 "github.com/CBookShu/kd48/api/proto/user/v1"
+	"github.com/CBookShu/kd48/pkg/contextkey"
 	"github.com/CBookShu/kd48/pkg/dsroute"
 	"github.com/CBookShu/kd48/services/user/internal/data/sqlc"
 	"github.com/go-sql-driver/mysql"
@@ -229,15 +230,9 @@ func (s *userService) VerifyToken(ctx context.Context, req *userv1.VerifyTokenRe
 	slog.InfoContext(ctx, "Received VerifyToken request")
 
 	// Get user_id from context (injected by gateway)
-	userIDVal := ctx.Value("user_id")
-	if userIDVal == nil {
-		slog.ErrorContext(ctx, "No user_id in context")
-		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
-	}
-
-	userID, ok := userIDVal.(uint32)
+	userID, ok := contextkey.GetUserID(ctx)
 	if !ok {
-		slog.ErrorContext(ctx, "Invalid user_id type in context")
+		slog.ErrorContext(ctx, "No user_id in context")
 		return nil, status.Errorf(codes.Code(commonv1.ErrorCode_USER_NOT_AUTHENTICATED), "用户未认证")
 	}
 
