@@ -55,7 +55,7 @@ func TestWrapIngress_PropagatesError(t *testing.T) {
 	}
 }
 
-func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
+func TestWrapIngress_InjectsUserIDIntoBaggage(t *testing.T) {
 	stub := &stubIngressClient{
 		reply: &gatewayv1.IngressReply{JsonPayload: []byte(`{}`)},
 	}
@@ -66,16 +66,16 @@ func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
 		isAuthenticated: true,
 	}
 
-	var gotUserID uint32
-	var ctxChecked bool
+	var gotUserID string
+	var baggageChecked bool
 
-	// 创建一个包装器来检查 context
-	h := WrapIngress(&contextCheckerClient{
+	// 创建一个包装器来检查 baggage
+	h := WrapIngress(&baggageCheckerClient{
 		stubIngressClient: stub,
-		checkCtx: func(ctx context.Context) {
-			ctxChecked = true
-			if v := ctx.Value("user_id"); v != nil {
-				gotUserID = v.(uint32)
+		checkBaggage: func(baggage map[string]string) {
+			baggageChecked = true
+			if v, ok := baggage["user_id"]; ok {
+				gotUserID = v
 			}
 		},
 	}, "/test")
@@ -85,23 +85,23 @@ func TestWrapIngress_InjectsUserIDIntoContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !ctxChecked {
-		t.Fatal("context was not checked")
+	if !baggageChecked {
+		t.Fatal("baggage was not checked")
 	}
 
-	if gotUserID != 12345 {
-		t.Fatalf("want user_id=12345 in context, got %d", gotUserID)
+	if gotUserID != "12345" {
+		t.Fatalf("want user_id=12345 in baggage, got %q", gotUserID)
 	}
 }
 
-type contextCheckerClient struct {
+type baggageCheckerClient struct {
 	*stubIngressClient
-	checkCtx func(ctx context.Context)
+	checkBaggage func(map[string]string)
 }
 
-func (c *contextCheckerClient) Call(ctx context.Context, in *gatewayv1.IngressRequest, opts ...grpc.CallOption) (*gatewayv1.IngressReply, error) {
-	if c.checkCtx != nil {
-		c.checkCtx(ctx)
+func (c *baggageCheckerClient) Call(ctx context.Context, in *gatewayv1.IngressRequest, opts ...grpc.CallOption) (*gatewayv1.IngressReply, error) {
+	if c.checkBaggage != nil {
+		c.checkBaggage(in.GetBaggage())
 	}
 	return c.stubIngressClient.Call(ctx, in, opts...)
 }
