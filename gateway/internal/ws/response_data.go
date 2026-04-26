@@ -13,7 +13,10 @@ func DataFromWsHandlerResult(resp *WsHandlerResult) (interface{}, error) {
 		return nil, nil
 	}
 	if resp.Message != nil {
-		marshaler := protojson.MarshalOptions{EmitUnpopulated: true}
+		marshaler := protojson.MarshalOptions{
+			EmitUnpopulated: true,
+			UseProtoNames:   true, // 使用 proto 字段名（snake_case）
+		}
 		jsonBytes, err := marshaler.Marshal(resp.Message)
 		if err != nil {
 			return nil, err
