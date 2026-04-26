@@ -143,6 +143,7 @@ func main() {
 		redisPools,
 		routingCfg.MySQLRoutes,
 		routingCfg.RedisRoutes,
+		"lobby",
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to create router: %w", err))

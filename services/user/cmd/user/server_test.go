@@ -21,7 +21,7 @@ func TestUserService_getQueries_Success(t *testing.T) {
 	mysqlRoutes := []dsroute.RouteRule{{Prefix: "sys:user:", Pool: "default"}}
 	redisRoutes := []dsroute.RouteRule{{Prefix: "", Pool: "default"}}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "user")
 	if err != nil {
 		t.Fatalf("failed to create router: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestUserService_getQueries_RouteNotFound(t *testing.T) {
 	mysqlRoutes := []dsroute.RouteRule{{Prefix: "game:", Pool: "game_pool"}}
 	redisRoutes := []dsroute.RouteRule{{Prefix: "", Pool: "default"}}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "user")
 	if err != nil {
 		t.Logf("expected error: %v", err)
 		return
@@ -175,7 +175,7 @@ func createMockRouterWithRedis(t *testing.T, rdb redis.UniversalClient) *dsroute
 	redisPools := map[string]redis.UniversalClient{"default": rdb}
 	mysqlRoutes := []dsroute.RouteRule{}
 	redisRoutes := []dsroute.RouteRule{{Prefix: "sys:session", Pool: "default"}}
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "user")
 	if err != nil {
 		t.Fatalf("failed to create router: %v", err)
 	}

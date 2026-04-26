@@ -26,7 +26,7 @@ func newTestWatcherRouter(t *testing.T, db *sql.DB, rdb *redis.Client) *dsroute.
 		{Prefix: testWatcherRoutingKey, Pool: "default"},
 	}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, mysqlRoutes, redisRoutes, "lobby")
 	if err != nil {
 		t.Fatalf("failed to create test router: %v", err)
 	}

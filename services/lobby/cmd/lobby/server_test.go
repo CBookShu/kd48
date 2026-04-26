@@ -18,7 +18,7 @@ func newTestLobbyRouter(t *testing.T) *dsroute.Router {
 	mysqlPools := map[string]*sql.DB{}
 	redisPools := map[string]redis.UniversalClient{}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, nil, nil)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, nil, nil, "lobby")
 	if err != nil {
 		t.Fatalf("failed to create test router: %v", err)
 	}

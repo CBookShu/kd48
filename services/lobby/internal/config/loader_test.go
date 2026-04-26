@@ -21,7 +21,7 @@ func newTestRouter(t *testing.T, db *sql.DB) *dsroute.Router {
 		{Prefix: testRoutingKey, Pool: "default"},
 	}
 
-	router, err := dsroute.NewRouter(mysqlPools, redisPools, routes, nil)
+	router, err := dsroute.NewRouter(mysqlPools, redisPools, routes, nil, "lobby")
 	if err != nil {
 		t.Fatalf("failed to create test router: %v", err)
 	}
